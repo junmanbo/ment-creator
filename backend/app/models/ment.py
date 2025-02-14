@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlmodel import Field, SQLModel, Relationship
 from typing import Optional
-from models.users import User
+from app.models.users import User
 
 
 class MentBase(SQLModel):
