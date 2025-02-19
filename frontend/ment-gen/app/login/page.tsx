@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -8,15 +10,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
+import { useAppDispatch } from "../store/hooks"
+import { login } from "../store/authSlice"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const dispatch = useAppDispatch()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/login/access-token`, {
         method: "POST",
@@ -28,22 +35,37 @@ export default function LoginPage() {
 
       if (response.ok) {
         const data = await response.json()
+        dispatch(login(data.access_token))
         localStorage.setItem("access_token", data.access_token)
+        toast({
+          title: "로그인 성공",
+          description: "홈 페이지로 이동합니다.",
+        })
         router.push("/")
       } else {
-        toast({
-          title: "로그인 실패",
-          description: "아이디 또는 비밀번호를 확인해주세요.",
-          variant: "destructive",
-        })
+        if (response.status === 400) {
+          toast({
+            title: "로그인 실패",
+            description: "아이디와 비밀번호를 다시 확인해주세요.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "로그인 오류",
+            description: "잠시 일시적인 오류가 있습니다. 다시 시도해 주세요.",
+            variant: "destructive",
+          })
+        }
       }
     } catch (error) {
       console.error("Login error:", error)
       toast({
         title: "로그인 오류",
-        description: "서버와의 통신 중 오류가 발생했습니다.",
+        description: "잠시 일시적인 오류가 있습니다. 다시 시도해 주세요.",
         variant: "destructive",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -87,8 +109,15 @@ export default function LoginPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-2">
-              <Button type="submit" className="w-full">
-                로그인
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    로그인 중...
+                  </>
+                ) : (
+                  "로그인"
+                )}
               </Button>
               <Button variant="outline" className="w-full" asChild>
                 <Link href="/register">회원가입</Link>

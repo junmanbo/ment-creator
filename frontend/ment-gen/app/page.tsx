@@ -1,7 +1,13 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { User } from "lucide-react"
+import { useAppSelector } from "./store/hooks"
 
 export default function Home() {
+  const isLoggedIn = useAppSelector((state) => state.auth.isLoggedIn)
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="container mx-auto py-4 px-4 sm:px-6 lg:px-8">
@@ -14,9 +20,16 @@ export default function Home() {
               <Link href="/list">멘트 목록</Link>
             </Button>
           </div>
-          <Button asChild>
-            <Link href="/login">로그인</Link>
-          </Button>
+          {isLoggedIn ? (
+            <Link href="/mypage" className="flex flex-col items-center">
+              <User className="h-6 w-6" />
+              <span className="text-sm">마이페이지</span>
+            </Link>
+          ) : (
+            <Button asChild>
+              <Link href="/login">로그인</Link>
+            </Button>
+          )}
         </nav>
       </header>
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center text-center">

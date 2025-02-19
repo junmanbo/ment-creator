@@ -1,15 +1,14 @@
+"use client"
+
+import type React from "react"
+
 import "./globals.css"
-import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import type React from "react" // Import React
+import { Toaster } from "@/components/ui/toaster"
+import { Provider } from "react-redux"
+import { store } from "./store/store"
 
 const inter = Inter({ subsets: ["latin"] })
-
-export const metadata: Metadata = {
-  title: "AI 멘트 생성기",
-  description: "AI를 이용한 맞춤형 음성 멘트 생성 서비스",
-    generator: 'v0.dev'
-}
 
 export default function RootLayout({
   children,
@@ -18,11 +17,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <Provider store={store}>
+          {children}
+          <Toaster />
+        </Provider>
+      </body>
     </html>
   )
 }
 
-
-
-import './globals.css'
