@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime
 from sqlmodel import Field, SQLModel, Relationship
 from typing import Optional
-from app.models.users import User
 
 
 class MentBase(SQLModel):
@@ -26,4 +25,5 @@ class Ment(MentBase, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id")
     created_dt: datetime = Field(default_factory=datetime.now)
     modified_dt: datetime = Field(default_factory=datetime.now)
-    user: Optional[User] = Relationship(back_populates="ments")
+    file_path: Optional[str] = Field(default=None, max_length=255)  # 멘트가 저장된 파일 경로
+    user: Optional["User"] = Relationship(back_populates="ments")

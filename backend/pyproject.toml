@@ -1,26 +1,20 @@
-[tool.poetry]
-name = "ment-creator"
+[project]
+name = "ment"
 version = "0.1.0"
 description = "Create ARS ment using AI"
-authors = ["Jun <chchdelm3@icloud.com>"]
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.12"
-fastapi = {extras = ["standard"], version = "^0.115.6"}
-alembic = "^1.14.0"
-sentry-sdk = {extras = ["fastapi"], version = "^2.19.2"}
-pydantic-settings = "^2.7.1"
-psycopg = {extras = ["binary"], version = "^3.2.3"}
-sqlmodel = "^0.0.22"
-pyjwt = "^2.10.1"
-ruff = "^0.9.3"
-mypy = "^1.14.1"
-tenacity = "^9.0.0"
-bcrypt = "^4.2.1"
-passlib = "^1.7.4"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.14.1",
+    "bcrypt>=4.2.1",
+    "fastapi[standard]>=0.115.8",
+    "passlib>=1.7.4",
+    "psycopg[binary,pool]>=3.2.5",
+    "pydantic-settings>=2.8.0",
+    "pyjwt>=2.10.1",
+    "ruff>=0.9.6",
+    "sentry-sdk>=2.22.0",
+    "sqlalchemy>=2.0.38",
+    "sqlmodel>=0.0.22",
+    "tenacity>=9.0.0",
+]

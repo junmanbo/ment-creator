@@ -1,8 +1,9 @@
 from sqlmodel import Session, create_engine, select
-
+from datetime import datetime
 from app.crud import users as crud
 from app.core.config import settings
 from app.models.users import User, UserCreate
+from app.models.ment import Ment
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
@@ -31,3 +32,16 @@ def init_db(session: Session) -> None:
             is_superuser=True,
         )
         user = crud.create_user(session=session, user_create=user_in)
+
+    # 더미 데이터 생성
+    user_id = user.id
+    dummy_ments = [
+        Ment(title=f"Title {i}", sub_title=f"SubTitle {i}", content=f"Content {i}",
+             user_id=user_id, created_dt=datetime.now(), modified_dt=datetime.now(),
+             file_path=f"/path/to/file{i}")
+        for i in range(1, 14)
+    ]
+
+    for ment in dummy_ments:
+        session.add(ment)
+    session.commit()
