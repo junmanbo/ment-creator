@@ -11,7 +11,7 @@ class MentBase(SQLModel):
 
 
 class MentCreate(MentBase):
-    pass
+    file_path: Optional[str] = Field(default=None, max_length=255)  # 멘트가 저장된 파일 경로
 
 
 class MentUpdate(MentBase):

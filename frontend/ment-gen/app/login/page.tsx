@@ -46,13 +46,19 @@ export default function LoginPage() {
         if (response.status === 400) {
           toast({
             title: "로그인 실패",
-            description: "아이디와 비밀번호를 다시 확인해주세요.",
+            description: "로그인에 실패했습니다. 아이디 또는 패스워드를 다시 확인해 주세요.",
+            variant: "destructive",
+          })
+        } else if (response.status === 500) {
+          toast({
+            title: "시스템 오류",
+            description: "죄송합니다. 시스템 오류가 발생했습니다.",
             variant: "destructive",
           })
         } else {
           toast({
             title: "로그인 오류",
-            description: "잠시 일시적인 오류가 있습니다. 다시 시도해 주세요.",
+            description: "로그인 중 오류가 발생했습니다. 다시 시도해 주세요.",
             variant: "destructive",
           })
         }
@@ -60,8 +66,8 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Login error:", error)
       toast({
-        title: "로그인 오류",
-        description: "잠시 일시적인 오류가 있습니다. 다시 시도해 주세요.",
+        title: "네트워크 오류",
+        description: "서버와의 연결에 문제가 있습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.",
         variant: "destructive",
       })
     } finally {

@@ -17,6 +17,7 @@ def create_ment(
     """
     Create new ment.
     """
+    ment_in.file_path = "/tmp/file_path_test"
     ment = crud.create_ment(session=session, ment_in=ment_in, user_id=current_user.id)
     return ment
 

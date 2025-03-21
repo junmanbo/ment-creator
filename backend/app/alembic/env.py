@@ -9,13 +9,11 @@ from alembic import context
 from app.core.config import settings
 from sqlmodel import SQLModel
 
-
 # Dynamically import all models from app.models
 def import_submodules(package_name):
     package = importlib.import_module(package_name)
     for _, name, _ in pkgutil.iter_modules(package.__path__):
         importlib.import_module(f"{package_name}.{name}")
-
 
 import_submodules("app.models")
 

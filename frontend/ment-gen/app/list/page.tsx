@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
 
 interface Ment {
   id: number
@@ -33,12 +32,7 @@ export default function MentListPage() {
 
   return (
     <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">멘트 목록</h1>
-        <Button asChild>
-          <Link href="/">홈으로</Link>
-        </Button>
-      </div>
+      <h1 className="text-2xl font-bold mb-6">멘트 목록</h1>
       <div className="space-y-4 mb-6">
         {currentMents.map((ment) => (
           <Card key={ment.id}>
