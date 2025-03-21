@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAppSelector, useAppDispatch } from "../store/hooks"
 import { logout } from "../store/authSlice"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function MyPage() {
   const isLoggedIn = useAppSelector((state) => state.auth.isLoggedIn)
   const router = useRouter()
   const dispatch = useAppDispatch()
+  const { toast } = useToast()
 
   useEffect(() => {
     if (!isLoggedIn) {
