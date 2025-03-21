@@ -4,20 +4,19 @@ from typing import Any, List
 from fastapi import APIRouter, HTTPException
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models.ment import Ment, MentCreate, MentUpdate
+from app.models.ment import Ment, MentCreate, MentUpdate, MentPublic
 from app.crud import ment as crud
 
 router = APIRouter(prefix="/ments", tags=["ments"])
 
 
-@router.post("/", response_model=Ment)
+@router.post("/", response_model=MentPublic)
 def create_ment(
     *, session: SessionDep, ment_in: MentCreate, current_user: CurrentUser
 ) -> Any:
     """
     Create new ment.
     """
-    ment_in.file_path = "/tmp/file_path_test"
     ment = crud.create_ment(session=session, ment_in=ment_in, user_id=current_user.id)
     return ment
 
@@ -54,9 +53,9 @@ def delete_ment(
     return ment
 
 
-@router.get("/", response_model=List[Ment])
+@router.get("/", response_model=List[MentPublic])
 def read_ments(
-    *, session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 5
+    *, session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 10
 ) -> Any:
     """
     Retrieve ments created by the current user.
