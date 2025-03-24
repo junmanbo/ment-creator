@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 
@@ -18,6 +18,7 @@ export default function CreateMentPage() {
   const [content, setContent] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,7 +87,7 @@ export default function CreateMentPage() {
         })
         router.push("/list")
       } else {
-        if (response.status === 403) {
+        if (response.status === 401) {
           toast({
             title: "인증 오류",
             description: "로그인이 만료되었습니다. 다시 로그인해주세요.",
