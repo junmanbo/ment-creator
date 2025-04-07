@@ -43,7 +43,7 @@ export default function MentListPage() {
   })
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     const fetchMents = async () => {
@@ -147,11 +147,17 @@ export default function MentListPage() {
     audio.addEventListener("error", handleError as EventListener)
 
     return () => {
+      // 컴포넌트 언마운트 시 오디오 정리
       audio.pause()
       audio.removeEventListener("timeupdate", handleTimeUpdate)
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata)
       audio.removeEventListener("ended", handleEnded)
       audio.removeEventListener("error", handleError as EventListener)
+
+      // Blob URL 정리
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+      }
     }
   }, [toast])
 
@@ -187,15 +193,46 @@ export default function MentListPage() {
     }))
 
     try {
-      const accessToken = localStorage.getItem("access_token")
-      const headers: HeadersInit = {}
-
-      if (accessToken) {
-        headers["Authorization"] = `Bearer ${accessToken}`
+      // 기존 Blob URL 정리
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+        audioUrlRef.current = null
       }
 
-      const audioUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/ments/${mentId}/audio`
+      const accessToken = localStorage.getItem("access_token")
 
+      if (!accessToken) {
+        toast({
+          title: "인증 오류",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
+        })
+        setAudioState((prev) => ({
+          ...prev,
+          isLoading: false,
+        }))
+        return
+      }
+
+      // fetch API를 사용하여 오디오 데이터 가져오기 (Authorization 헤더 포함)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/ments/${mentId}/audio`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // 응답 데이터를 Blob으로 변환
+      const audioBlob = await response.blob()
+
+      // Blob에서 URL 생성
+      const audioUrl = URL.createObjectURL(audioBlob)
+      audioUrlRef.current = audioUrl
+
+      // 오디오 요소에 URL 설정 및 재생
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.src = audioUrl
