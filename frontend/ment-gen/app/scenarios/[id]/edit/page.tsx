@@ -39,6 +39,8 @@ import { Separator } from "@/components/ui/separator"
 import NodeEditor from "../components/NodeEditor"
 import VersionManager from "../components/VersionManager"
 import ScenarioStatusManager from "../components/ScenarioStatusManager"
+import ImportExportManager from "../../../components/ImportExportManager"
+import CollaborationManager from "../../../components/CollaborationManager"
 import { 
   Save, 
   Play, 
@@ -342,7 +344,7 @@ function ScenarioEditPageContent() {
   const exportScenario = () => {
     if (!scenario) return
     
-    const exportData = {
+    return {
       scenario: {
         name: scenario.name,
         description: scenario.description,
@@ -363,15 +365,67 @@ function ScenarioEditPageContent() {
         condition: edge.data?.condition
       }))
     }
-    
-    const dataStr = JSON.stringify(exportData, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${scenario.name}_scenario.json`
-    link.click()
-    URL.revokeObjectURL(url)
+  }
+  
+  const importScenario = async (importData: any) => {
+    try {
+      // 기존 노드와 연결 초기화
+      setNodes([])
+      setEdges([])
+      
+      // 새 데이터로 설정
+      const importedNodes: ScenarioNode[] = importData.nodes.map((node: any) => ({
+        id: node.id,
+        type: node.type,
+        position: node.position || { x: 0, y: 0 },
+        data: {
+          label: node.name,
+          nodeType: node.type,
+          config: node.config || {}
+        }
+      }))
+      
+      const importedEdges: ScenarioEdge[] = importData.edges.map((edge: any, index: number) => ({
+        id: `imported-edge-${index}`,
+        source: edge.source,
+        target: edge.target,
+        label: edge.label,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+        },
+        data: {
+          condition: edge.condition,
+          label: edge.label
+        }
+      }))
+      
+      setNodes(importedNodes)
+      setEdges(importedEdges)
+      
+      // 시나리오 기본 정보 업데이트
+      if (scenario && importData.scenario) {
+        setScenario({
+          ...scenario,
+          name: importData.scenario.name || scenario.name,
+          description: importData.scenario.description || scenario.description,
+          category: importData.scenario.category || scenario.category
+        })
+      }
+      
+      // 노드 카운터 업데이트
+      const maxNodeNum = Math.max(...importedNodes.map(n => {
+        const match = n.id.match(/\d+$/)
+        return match ? parseInt(match[0]) : 0
+      }), 0)
+      setNodeCounter(maxNodeNum + 1)
+      
+      // 화면에 맞춤
+      setTimeout(() => fitView(), 500)
+      
+    } catch (error) {
+      console.error('Import scenario error:', error)
+      throw error
+    }
   }
   
   // 새 노드 추가
@@ -602,14 +656,11 @@ function ScenarioEditPageContent() {
             <LayoutGrid className="h-4 w-4 mr-2" />
             그리드
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={exportScenario}
-            title="시나리오 내보내기"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            내보내기
-          </Button>
+          <ImportExportManager
+            onImport={importScenario}
+            onExport={exportScenario}
+            scenarioName={scenario.name}
+          />
           <Button variant="outline" onClick={() => router.push(`/scenarios/${scenario.id}/simulate`)}>
             <Play className="h-4 w-4 mr-2" />
             시뮬레이션
@@ -677,6 +728,22 @@ function ScenarioEditPageContent() {
               <VersionManager
                 scenarioId={scenario.id}
                 currentVersion={scenario.version}
+              />
+            </div>
+            
+            {/* 협업 관리 */}
+            <div className="p-4 border-t">
+              <CollaborationManager
+                scenarioId={scenario.id}
+                currentUser={{
+                  id: "current_user", // 실제로는 인증된 사용자 정보
+                  name: "김개발",
+                  email: "kim@example.com"
+                }}
+                onUserAction={(action, nodeId) => {
+                  // 사용자 액션 처리
+                  console.log('User action:', action, nodeId)
+                }}
               />
             </div>
           </div>
