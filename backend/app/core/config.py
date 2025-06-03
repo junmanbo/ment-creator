@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: str
     FIRST_SUPERUSER_PASSWORD: str
 
+    # TTS 관련 설정
+    TTS_MODEL_CACHE_DIR: str = "/tmp/tts_models"
+    AUDIO_FILES_DIR: str = "audio_files"
+    VOICE_SAMPLES_DIR: str = "voice_samples"
+    TTS_GPU_ENABLED: bool = False
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
