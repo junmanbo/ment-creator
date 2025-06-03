@@ -53,7 +53,9 @@ class VoiceActor(VoiceActorBase, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
     
     # 관계 정의
-    created_by_user: Optional["User"] = Relationship()
+    created_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[VoiceActor.created_by]"}
+    )
     voice_models: List["VoiceModel"] = Relationship(back_populates="voice_actor")
     voice_samples: List["VoiceSample"] = Relationship(back_populates="voice_actor")
 
@@ -117,7 +119,9 @@ class VoiceSample(VoiceSampleBase, table=True):
     
     # 관계 정의
     voice_actor: Optional[VoiceActor] = Relationship(back_populates="voice_samples")
-    uploaded_by_user: Optional["User"] = Relationship()
+    uploaded_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[VoiceSample.uploaded_by]"}
+    )
 
 class VoiceSamplePublic(VoiceSampleBase):
     id: uuid.UUID

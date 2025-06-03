@@ -18,12 +18,6 @@ export function Navbar() {
             </Link>
             <div className="flex space-x-2">
               <Button variant="ghost" asChild>
-                <Link href="/scenarios">시나리오 관리</Link>
-              </Button>
-              <Button variant="ghost" asChild>
-                <Link href="/voice-actors">성우 관리</Link>
-              </Button>
-              <Button variant="ghost" asChild>
                 <Link href="/create">멘트 생성하기</Link>
               </Button>
               <Button variant="ghost" asChild>
@@ -46,4 +40,3 @@ export function Navbar() {
     </header>
   )
 }
-

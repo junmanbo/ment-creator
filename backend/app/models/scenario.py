@@ -50,8 +50,12 @@ class Scenario(ScenarioBase, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
     
     # 관계 정의
-    created_by_user: Optional["User"] = Relationship()
-    updated_by_user: Optional["User"] = Relationship()
+    created_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Scenario.created_by]"}
+    )
+    updated_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Scenario.updated_by]"}
+    )
     nodes: List["ScenarioNode"] = Relationship(back_populates="scenario", cascade_delete=True)
     connections: List["ScenarioConnection"] = Relationship(back_populates="scenario", cascade_delete=True)
     versions: List["ScenarioVersion"] = Relationship(back_populates="scenario", cascade_delete=True)
@@ -145,7 +149,9 @@ class ScenarioVersion(ScenarioVersionBase, table=True):
     
     # 관계 정의
     scenario: Optional[Scenario] = Relationship(back_populates="versions")
-    created_by_user: Optional["User"] = Relationship()
+    created_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ScenarioVersion.created_by]"}
+    )
 
 class ScenarioVersionPublic(ScenarioVersionBase):
     id: uuid.UUID
@@ -178,7 +184,9 @@ class ScenarioSimulation(ScenarioSimulationBase, table=True):
     
     # 관계 정의
     scenario: Optional[Scenario] = Relationship()
-    started_by_user: Optional["User"] = Relationship()
+    started_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ScenarioSimulation.started_by]"}
+    )
 
 class ScenarioSimulationPublic(ScenarioSimulationBase):
     id: uuid.UUID

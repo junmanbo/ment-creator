@@ -34,7 +34,9 @@ class TTSScript(TTSScriptBase, table=True):
     
     # 관계 정의
     voice_actor: Optional["VoiceActor"] = Relationship()
-    created_by_user: Optional["User"] = Relationship()
+    created_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[TTSScript.created_by]"}
+    )
     generations: List["TTSGeneration"] = Relationship(back_populates="script")
 
 class TTSScriptPublic(TTSScriptBase):
@@ -70,7 +72,9 @@ class TTSGeneration(TTSGenerationBase, table=True):
     # 관계 정의
     script: Optional[TTSScript] = Relationship(back_populates="generations")
     voice_model: Optional["VoiceModel"] = Relationship()
-    requested_by_user: Optional["User"] = Relationship()
+    requested_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[TTSGeneration.requested_by]"}
+    )
 
 class TTSGenerationPublic(TTSGenerationBase):
     id: uuid.UUID
@@ -115,7 +119,9 @@ class TTSLibrary(TTSLibraryBase, table=True):
     
     # 관계 정의
     voice_actor: Optional["VoiceActor"] = Relationship()
-    created_by_user: Optional["User"] = Relationship()
+    created_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[TTSLibrary.created_by]"}
+    )
 
 class TTSLibraryPublic(TTSLibraryBase):
     id: uuid.UUID
