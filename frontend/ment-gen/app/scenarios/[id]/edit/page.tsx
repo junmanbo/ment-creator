@@ -26,6 +26,8 @@ import {
   Panel,
   MiniMap,
   ConnectionMode,
+  useReactFlow,
+  ReactFlowProvider,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
@@ -48,7 +50,13 @@ import {
   PhoneCall,
   Square,
   Mic,
-  Loader2
+  Loader2,
+  LayoutGrid,
+  Workflow,
+  Maximize,
+  RotateCcw,
+  Download,
+  Upload
 } from "lucide-react"
 
 // 노드 타입 정의
@@ -150,10 +158,11 @@ interface Scenario {
   connections: any[]
 }
 
-export default function ScenarioEditPage() {
+function ScenarioEditPageContent() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { fitView, getNodes, getEdges } = useReactFlow()
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -258,13 +267,140 @@ export default function ScenarioEditPage() {
     setSelectedNode(node as ScenarioNode)
   }, [])
 
+  // 자동 레이아웃 함수들
+  const autoLayoutVertical = () => {
+    const currentNodes = getNodes()
+    const currentEdges = getEdges()
+    
+    if (currentNodes.length === 0) return
+    
+    // 시작 노드 찾기
+    const startNode = currentNodes.find(node => node.data.nodeType === 'start')
+    if (!startNode) return
+    
+    const visited = new Set<string>()
+    const positioned = new Map<string, { x: number; y: number }>()
+    const VERTICAL_SPACING = 150
+    const HORIZONTAL_SPACING = 200
+    
+    function positionNodesRecursively(nodeId: string, x: number, y: number, level: number) {
+      if (visited.has(nodeId)) return
+      visited.add(nodeId)
+      
+      positioned.set(nodeId, { x, y })
+      
+      // 연결된 다음 노드들 찾기
+      const connectedEdges = currentEdges.filter(edge => edge.source === nodeId)
+      const childNodes = connectedEdges.map(edge => edge.target)
+      
+      childNodes.forEach((childId, index) => {
+        const childX = x + (index - (childNodes.length - 1) / 2) * HORIZONTAL_SPACING
+        const childY = y + VERTICAL_SPACING
+        positionNodesRecursively(childId, childX, childY, level + 1)
+      })
+    }
+    
+    // 시작 노드부터 재귀적으로 배치
+    positionNodesRecursively(startNode.id, 400, 50, 0)
+    
+    // 위치가 설정되지 않은 노드들 처리
+    currentNodes.forEach((node, index) => {
+      if (!positioned.has(node.id)) {
+        positioned.set(node.id, { 
+          x: 100 + (index % 5) * HORIZONTAL_SPACING, 
+          y: 300 + Math.floor(index / 5) * VERTICAL_SPACING 
+        })
+      }
+    })
+    
+    // 노드 위치 업데이트
+    setNodes(nds => nds.map(node => {
+      const newPosition = positioned.get(node.id)
+      return newPosition ? { ...node, position: newPosition } : node
+    }))
+    
+    // 화면에 맞춤
+    setTimeout(() => fitView(), 100)
+  }
+  
+  const autoLayoutGrid = () => {
+    const currentNodes = getNodes()
+    const GRID_SIZE = 250
+    const COLS = Math.ceil(Math.sqrt(currentNodes.length))
+    
+    setNodes(nds => nds.map((node, index) => ({
+      ...node,
+      position: {
+        x: (index % COLS) * GRID_SIZE + 100,
+        y: Math.floor(index / COLS) * GRID_SIZE + 100
+      }
+    })))
+    
+    setTimeout(() => fitView(), 100)
+  }
+  
+  const exportScenario = () => {
+    if (!scenario) return
+    
+    const exportData = {
+      scenario: {
+        name: scenario.name,
+        description: scenario.description,
+        category: scenario.category,
+        version: scenario.version
+      },
+      nodes: getNodes().map(node => ({
+        id: node.id,
+        type: node.data.nodeType,
+        name: node.data.label,
+        position: node.position,
+        config: node.data.config
+      })),
+      edges: getEdges().map(edge => ({
+        source: edge.source,
+        target: edge.target,
+        label: edge.label,
+        condition: edge.data?.condition
+      }))
+    }
+    
+    const dataStr = JSON.stringify(exportData, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${scenario.name}_scenario.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  
   // 새 노드 추가
   const addNode = (nodeType: string) => {
     const nodeId = `${nodeType}_${nodeCounter}`
+    
+    // 기존 노드들의 위치를 고려하여 새 위치 계산
+    const currentNodes = getNodes()
+    let newX = 100
+    let newY = 100
+    
+    if (currentNodes.length > 0) {
+      // 가장 오른쪽, 아래쪽 노드 위치 찾기
+      const maxX = Math.max(...currentNodes.map(n => n.position.x))
+      const maxY = Math.max(...currentNodes.map(n => n.position.y))
+      newX = maxX + 200
+      newY = maxY
+      
+      // 화면을 벗어나면 다음 줄로
+      if (newX > 800) {
+        newX = 100
+        newY = maxY + 150
+      }
+    }
+    
     const newNode: ScenarioNode = {
       id: nodeId,
       type: nodeType,
-      position: { x: Math.random() * 300 + 100, y: Math.random() * 300 + 100 },
+      position: { x: newX, y: newY },
       data: {
         label: getNodeLabel(nodeType),
         nodeType: nodeType as any,
@@ -450,7 +586,31 @@ export default function ScenarioEditPage() {
         </div>
         
         <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={() => {}}>
+          <Button 
+            variant="outline" 
+            onClick={autoLayoutVertical}
+            title="수직 자동 레이아웃"
+          >
+            <Workflow className="h-4 w-4 mr-2" />
+            자동 배치
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={autoLayoutGrid}
+            title="그리드 레이아웃"
+          >
+            <LayoutGrid className="h-4 w-4 mr-2" />
+            그리드
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={exportScenario}
+            title="시나리오 내보내기"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            내보내기
+          </Button>
+          <Button variant="outline" onClick={() => router.push(`/scenarios/${scenario.id}/simulate`)}>
             <Play className="h-4 w-4 mr-2" />
             시뮬레이션
           </Button>
@@ -539,15 +699,55 @@ export default function ScenarioEditPage() {
             <Controls />
             <MiniMap />
             <Panel position="top-right">
-              <div className="bg-white p-2 rounded shadow">
-                <p className="text-xs text-gray-600">
-                  노드: {nodes.length} / 연결: {edges.length}
-                </p>
+              <div className="bg-white p-3 rounded-lg shadow-lg border space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">시나리오 상태</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-gray-600">노드:</span>
+                      <span className="font-medium ml-1">{nodes.length}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">연결:</span>
+                      <span className="font-medium ml-1">{edges.length}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fitView()}
+                    className="w-full text-xs h-8"
+                  >
+                    <Maximize className="h-3 w-3 mr-1" />
+                    전체 보기
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={autoLayoutVertical}
+                    className="w-full text-xs h-8"
+                  >
+                    <Workflow className="h-3 w-3 mr-1" />
+                    자동 배치
+                  </Button>
+                </div>
               </div>
             </Panel>
           </ReactFlow>
         </div>
       </div>
     </div>
+  )
+}
+
+// ReactFlowProvider로 감싸는 wrapper 컴포넌트
+export default function ScenarioEditPage() {
+  return (
+    <ReactFlowProvider>
+      <ScenarioEditPageContent />
+    </ReactFlowProvider>
   )
 }
