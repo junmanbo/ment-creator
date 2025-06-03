@@ -1,4 +1,12 @@
-"use client"
+  // 시나리오 상태 변경 핸들러
+  const handleStatusChange = (newStatus: string) => {
+    if (scenario) {
+      setScenario({
+        ...scenario,
+        status: newStatus
+      })
+    }
+  }"use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
@@ -27,6 +35,8 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import { Separator } from "@/components/ui/separator"
 import NodeEditor from "../components/NodeEditor"
+import VersionManager from "../components/VersionManager"
+import ScenarioStatusManager from "../components/ScenarioStatusManager"
 import { 
   Save, 
   Play, 
@@ -152,6 +162,16 @@ export default function ScenarioEditPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [nodeCounter, setNodeCounter] = useState(1)
+
+  // 시나리오 상태 변경 핸들러
+  const handleStatusChange = (newStatus: string) => {
+    if (scenario) {
+      setScenario({
+        ...scenario,
+        status: newStatus
+      })
+    }
+  }
 
   // 시나리오 로드
   useEffect(() => {
@@ -474,13 +494,31 @@ export default function ScenarioEditPage() {
           </div>
 
           {/* 노드 편집기 */}
-          <div className="flex-1 p-4 overflow-y-auto">
-            <NodeEditor
-              selectedNode={selectedNode}
-              onUpdateNode={updateNodeData}
-              onUpdateConfig={updateNodeConfig}
-              onDeleteNode={deleteSelectedNode}
-            />
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4">
+              <NodeEditor
+                selectedNode={selectedNode}
+                onUpdateNode={updateNodeData}
+                onUpdateConfig={updateNodeConfig}
+                onDeleteNode={deleteSelectedNode}
+              />
+            </div>
+            
+            {/* 상태 관리 */}
+            <div className="p-4 border-t">
+              <ScenarioStatusManager
+                scenario={scenario}
+                onStatusChange={handleStatusChange}
+              />
+            </div>
+            
+            {/* 버전 관리 */}
+            <div className="p-4 border-t">
+              <VersionManager
+                scenarioId={scenario.id}
+                currentVersion={scenario.version}
+              />
+            </div>
           </div>
         </div>
 
