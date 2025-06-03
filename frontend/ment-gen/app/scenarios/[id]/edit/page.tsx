@@ -23,21 +23,15 @@ import "@xyflow/react/dist/style.css"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import { Separator } from "@/components/ui/separator"
+import NodeEditor from "../components/NodeEditor"
 import { 
   Save, 
   Play, 
   ArrowLeft, 
   Plus,
-  Trash2,
-  Settings,
   Phone,
   MessageSquare,
   GitBranch,
@@ -452,79 +446,42 @@ export default function ScenarioEditPage() {
       </div>
 
       <div className="flex-1 flex">
-        {/* 좌측 노드 팔레트 */}
-        <div className="w-64 bg-gray-50 border-r p-4">
-          <h3 className="font-medium mb-4">노드 팔레트</h3>
-          <div className="space-y-2">
-            {[
-              { type: "start", label: "시작", icon: Phone, color: "green" },
-              { type: "message", label: "메시지", icon: MessageSquare, color: "blue" },
-              { type: "branch", label: "분기", icon: GitBranch, color: "yellow" },
-              { type: "transfer", label: "상담원", icon: PhoneCall, color: "purple" },
-              { type: "input", label: "입력", icon: Mic, color: "gray" },
-              { type: "end", label: "종료", icon: Square, color: "red" },
-            ].map((nodeType) => (
-              <Button
-                key={nodeType.type}
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => addNode(nodeType.type)}
-              >
-                <nodeType.icon className="h-4 w-4 mr-2" />
-                {nodeType.label}
-              </Button>
-            ))}
+        {/* 좌측 노드 팔레트 및 편집기 */}
+        <div className="w-80 bg-gray-50 border-r flex flex-col">
+          {/* 노드 팔레트 */}
+          <div className="p-4 border-b">
+            <h3 className="font-medium mb-4">노드 팔레트</h3>
+            <div className="space-y-2">
+              {[
+                { type: "start", label: "시작", icon: Phone, color: "green" },
+                { type: "message", label: "메시지", icon: MessageSquare, color: "blue" },
+                { type: "branch", label: "분기", icon: GitBranch, color: "yellow" },
+                { type: "transfer", label: "상담원", icon: PhoneCall, color: "purple" },
+                { type: "input", label: "입력", icon: Mic, color: "gray" },
+                { type: "end", label: "종료", icon: Square, color: "red" },
+              ].map((nodeType) => (
+                <Button
+                  key={nodeType.type}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => addNode(nodeType.type)}
+                >
+                  <nodeType.icon className="h-4 w-4 mr-2" />
+                  {nodeType.label}
+                </Button>
+              ))}
+            </div>
           </div>
 
-          {selectedNode && (
-            <>
-              <Separator className="my-4" />
-              <h3 className="font-medium mb-4">노드 설정</h3>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="node-name">노드 이름</Label>
-                  <Input
-                    id="node-name"
-                    value={selectedNode.data.label}
-                    onChange={(e) => updateNodeData("label", e.target.value)}
-                  />
-                </div>
-
-                {selectedNode.data.nodeType === "message" && (
-                  <div>
-                    <Label htmlFor="message-text">메시지 내용</Label>
-                    <Textarea
-                      id="message-text"
-                      value={selectedNode.data.config.text || ""}
-                      onChange={(e) => updateNodeConfig("text", e.target.value)}
-                      placeholder="고객에게 전달할 메시지를 입력하세요"
-                      rows={3}
-                    />
-                  </div>
-                )}
-
-                {selectedNode.data.nodeType === "branch" && (
-                  <div>
-                    <Label>분기 옵션</Label>
-                    <p className="text-sm text-gray-600 mb-2">
-                      고객의 선택에 따른 분기를 설정하세요
-                    </p>
-                    {/* 분기 옵션 설정 UI 추가 예정 */}
-                  </div>
-                )}
-
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={deleteSelectedNode}
-                  className="w-full"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  노드 삭제
-                </Button>
-              </div>
-            </>
-          )}
+          {/* 노드 편집기 */}
+          <div className="flex-1 p-4 overflow-y-auto">
+            <NodeEditor
+              selectedNode={selectedNode}
+              onUpdateNode={updateNodeData}
+              onUpdateConfig={updateNodeConfig}
+              onDeleteNode={deleteSelectedNode}
+            />
+          </div>
         </div>
 
         {/* 메인 플로우차트 영역 */}
