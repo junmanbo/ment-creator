@@ -24,7 +24,9 @@ import {
   ArrowUp,
   ArrowDown,
   Star,
-  Sparkles
+  Sparkles,
+  CheckCircle,
+  Clock
 } from "lucide-react"
 
 interface Scenario {
@@ -434,6 +436,84 @@ export default function ScenariosPage() {
         </div>
       </div>
 
+      {/* 통계 대시보드 */}
+      {scenarios.length > 0 && !showTemplatesOnly && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">전체 시나리오</p>
+                  <p className="text-xl font-semibold">{scenarios.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">활성 시나리오</p>
+                  <p className="text-xl font-semibold">
+                    {scenarios.filter(s => s.status === 'active').length}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Sparkles className="h-5 w-5 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">템플릿</p>
+                  <p className="text-xl font-semibold">
+                    {scenarios.filter(s => s.is_template).length}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Clock className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">초안 상태</p>
+                  <p className="text-xl font-semibold">
+                    {scenarios.filter(s => s.status === 'draft').length}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* 템플릿 갤러리 */}
+      {showTemplatesOnly && (
+        <div className="mb-6">
+          <div className="text-center mb-6">
+            <Sparkles className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
+            <h2 className="text-xl font-semibold mb-2">시나리오 템플릿</h2>
+            <p className="text-gray-600">사전 제작된 템플릿을 사용해 빠르게 시나리오를 생성하세요</p>
+          </div>
+        </div>
+      )}
+      
       {/* 시나리오 카드 목록 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {scenarios.map((scenario) => (
