@@ -19,7 +19,12 @@ import {
   Search,
   Filter,
   MoreVertical,
-  Loader2
+  Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Star,
+  Sparkles
 } from "lucide-react"
 
 interface Scenario {
@@ -52,6 +57,9 @@ export default function ScenariosPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [sortBy, setSortBy] = useState<string>("updated_at")
+  const [sortOrder, setSortOrder] = useState<string>("desc")
+  const [showTemplatesOnly, setShowTemplatesOnly] = useState(false)
   
   const [newScenario, setNewScenario] = useState<NewScenario>({
     name: "",
@@ -64,7 +72,7 @@ export default function ScenariosPage() {
 
   useEffect(() => {
     fetchScenarios()
-  }, [statusFilter, categoryFilter, searchTerm])
+  }, [statusFilter, categoryFilter, searchTerm, sortBy, sortOrder, showTemplatesOnly])
 
   const fetchScenarios = async () => {
     try {
@@ -75,6 +83,9 @@ export default function ScenariosPage() {
       if (statusFilter !== "all") params.append("status", statusFilter)
       if (categoryFilter !== "all") params.append("category", categoryFilter)
       if (searchTerm) params.append("search", searchTerm)
+      if (showTemplatesOnly) params.append("is_template", "true")
+      params.append("sort_by", sortBy)
+      params.append("sort_order", sortOrder)
       
       const response = await fetch(`${url}${params.toString()}`, {
         headers: {
@@ -199,27 +210,51 @@ export default function ScenariosPage() {
       is_template: false
     }
 
+    await createScenarioFromData(newScenarioData)
+  }
+
+  const createFromTemplate = async (template: Scenario) => {
+    const newScenarioData = {
+      name: `${template.name} - 새 시나리오`,
+      description: template.description || "",
+      category: template.category || "",
+      is_template: false
+    }
+
+    await createScenarioFromData(newScenarioData, template.id)
+  }
+
+  const createScenarioFromData = async (scenarioData: any, templateId?: string) => {
+
     try {
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios`, {
+      const endpoint = templateId 
+        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${templateId}/copy`
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios`
+        
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(newScenarioData),
+        body: JSON.stringify(scenarioData),
       })
 
       if (response.ok) {
-        const copiedScenario = await response.json()
-        setScenarios([copiedScenario, ...scenarios])
+        const newScenario = await response.json()
+        setScenarios([newScenario, ...scenarios])
         toast({
-          title: "복사 완료",
-          description: "시나리오가 복사되었습니다.",
+          title: templateId ? "템플릿에서 생성 완료" : "복사 완료",
+          description: templateId ? "템플릿에서 새 시나리오가 생성되었습니다." : "시나리오가 복사되었습니다.",
         })
+        
+        if (templateId) {
+          router.push(`/scenarios/${newScenario.id}/edit`)
+        }
       }
     } catch (error) {
-      console.error("Copy scenario error:", error)
+      console.error(templateId ? "Create from template error:" : "Copy scenario error:", error)
     }
   }
 
@@ -324,44 +359,79 @@ export default function ScenariosPage() {
       </div>
 
       {/* 검색 및 필터 */}
-      <div className="flex space-x-4 mb-6">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="시나리오 검색..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+      <div className="space-y-4 mb-6">
+        {/* 검색바 및 토글 */}
+        <div className="flex space-x-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="시나리오 검색..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
           </div>
+          
+          <Button
+            variant={showTemplatesOnly ? "default" : "outline"}
+            onClick={() => setShowTemplatesOnly(!showTemplatesOnly)}
+            className="flex items-center space-x-2"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>{showTemplatesOnly ? "모든 시나리오" : "템플릿만"}</span>
+          </Button>
         </div>
         
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="상태 필터" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">모든 상태</SelectItem>
-            <SelectItem value="active">활성</SelectItem>
-            <SelectItem value="testing">테스트</SelectItem>
-            <SelectItem value="draft">초안</SelectItem>
-            <SelectItem value="inactive">비활성</SelectItem>
-          </SelectContent>
-        </Select>
-        
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="카테고리 필터" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">모든 카테고리</SelectItem>
-            <SelectItem value="보험접수">보험접수</SelectItem>
-            <SelectItem value="보험상담">보험상담</SelectItem>
-            <SelectItem value="고객지원">고객지원</SelectItem>
-            <SelectItem value="일반문의">일반문의</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* 필터 및 정렬 */}
+        <div className="flex space-x-4">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="상태" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">모든 상태</SelectItem>
+              <SelectItem value="active">활성</SelectItem>
+              <SelectItem value="testing">테스트</SelectItem>
+              <SelectItem value="draft">초안</SelectItem>
+              <SelectItem value="inactive">비활성</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="카테고리" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">모든 카테고리</SelectItem>
+              <SelectItem value="보험접수">보험접수</SelectItem>
+              <SelectItem value="보험상담">보험상담</SelectItem>
+              <SelectItem value="고객지원">고객지원</SelectItem>
+              <SelectItem value="일반문의">일반문의</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="정렬 기준" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="updated_at">최근 수정</SelectItem>
+              <SelectItem value="created_at">생성일</SelectItem>
+              <SelectItem value="name">이름</SelectItem>
+              <SelectItem value="status">상태</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Button
+            variant="outline"
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            className="px-3"
+          >
+            {sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
 
       {/* 시나리오 카드 목록 */}
@@ -400,34 +470,51 @@ export default function ScenariosPage() {
             <CardFooter>
               <div className="flex justify-between items-center w-full">
                 <div className="flex space-x-2">
-                  <Button 
-                    size="sm" 
-                    onClick={() => router.push(`/scenarios/${scenario.id}/edit`)}
-                  >
-                    <Edit className="h-4 w-4 mr-1" />
-                    편집
-                  </Button>
+                  {scenario.is_template ? (
+                    <Button 
+                      size="sm" 
+                      onClick={() => createFromTemplate(scenario)}
+                      className="flex items-center space-x-1"
+                    >
+                      <Star className="h-4 w-4" />
+                      <span>템플릿 사용</span>
+                    </Button>
+                  ) : (
+                    <Button 
+                      size="sm" 
+                      onClick={() => router.push(`/scenarios/${scenario.id}/edit`)}
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      편집
+                    </Button>
+                  )}
+                  
                   <Button 
                     size="sm" 
                     variant="outline"
                     onClick={() => copyScenario(scenario)}
+                    title="복사하기"
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
                 
                 <div className="flex space-x-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => router.push(`/scenarios/${scenario.id}/simulate`)}
-                  >
-                    <Play className="h-4 w-4" />
-                  </Button>
+                  {!scenario.is_template && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => router.push(`/scenarios/${scenario.id}/simulate`)}
+                      title="시뮬레이션"
+                    >
+                      <Play className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button 
                     size="sm" 
                     variant="outline"
                     onClick={() => deleteScenario(scenario.id)}
+                    title="삭제하기"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
