@@ -13,7 +13,7 @@ if command -v tmux &> /dev/null; then
     tmux new-session -d -s ars-system
     
     # 백엔드 실행
-    tmux send-keys -t ars-system "cd backend && echo '🐍 백엔드 API 서버 시작...' && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" Enter
+    tmux send-keys -t ars-system "cd backend && echo '🐍 백엔드 API 서버 시작...' && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" Enter
     
     # 창 분할 및 프론트엔드 실행
     tmux split-window -t ars-system -h
