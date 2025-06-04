@@ -1,14 +1,6 @@
-  // 시나리오 상태 변경 핸들러
-  const handleStatusChange = (newStatus: string) => {
-    if (scenario) {
-      setScenario({
-        ...scenario,
-        status: newStatus
-      })
-    }
-  }"use client"
+"use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ReactFlow,
@@ -20,7 +12,6 @@ import {
   useEdgesState,
   addEdge,
   Connection,
-  EdgeTypes,
   NodeTypes,
   MarkerType,
   Panel,
@@ -32,13 +23,12 @@ import {
 import "@xyflow/react/dist/style.css"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
-import { Separator } from "@/components/ui/separator"
-import NodeEditor from "../components/NodeEditor"
-import VersionManager from "../components/VersionManager"
-import ScenarioStatusManager from "../components/ScenarioStatusManager"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import NodeEditor from "../../components/NodeEditor"
+import VersionManager from "../../components/VersionManager"
+import ScenarioStatusManager from "../../components/ScenarioStatusManager"
 import ImportExportManager from "../../../components/ImportExportManager"
 import CollaborationManager from "../../../components/CollaborationManager"
 import { 
@@ -56,9 +46,9 @@ import {
   LayoutGrid,
   Workflow,
   Maximize,
-  RotateCcw,
-  Download,
-  Upload
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2
 } from "lucide-react"
 
 // 노드 타입 정의
@@ -145,10 +135,6 @@ const nodeTypes: NodeTypes = {
   input: InputNode,
 }
 
-// 초기 노드 및 엣지
-const initialNodes: ScenarioNode[] = []
-const initialEdges: ScenarioEdge[] = []
-
 interface Scenario {
   id: string
   name: string
@@ -158,6 +144,10 @@ interface Scenario {
   status: string
   nodes: any[]
   connections: any[]
+  created_by: string
+  updated_by?: string
+  created_at: string
+  updated_at: string
 }
 
 function ScenarioEditPageContent() {
@@ -166,23 +156,21 @@ function ScenarioEditPageContent() {
   const { toast } = useToast()
   const { fitView, getNodes, getEdges } = useReactFlow()
   
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [selectedNode, setSelectedNode] = useState<ScenarioNode | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [nodeCounter, setNodeCounter] = useState(1)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // 시나리오 상태 변경 핸들러
-  const handleStatusChange = (newStatus: string) => {
-    if (scenario) {
-      setScenario({
-        ...scenario,
-        status: newStatus
-      })
-    }
-  }
+  // 변경사항 추적
+  useEffect(() => {
+    setHasUnsavedChanges(true)
+  }, [nodes, edges])
 
   // 시나리오 로드
   useEffect(() => {
@@ -192,8 +180,21 @@ function ScenarioEditPageContent() {
   }, [params.id])
 
   const loadScenario = async (scenarioId: string) => {
+    setIsLoading(true)
+    setError(null)
+    
     try {
       const accessToken = localStorage.getItem("access_token")
+      if (!accessToken) {
+        toast({
+          title: "인증 필요",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
+        })
+        router.push("/login")
+        return
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenarioId}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -205,10 +206,10 @@ function ScenarioEditPageContent() {
         setScenario(data)
         
         // 노드들을 React Flow 형식으로 변환
-        const flowNodes: ScenarioNode[] = data.nodes.map((node: any) => ({
+        const flowNodes: ScenarioNode[] = (data.nodes || []).map((node: any) => ({
           id: node.node_id,
           type: node.node_type,
-          position: { x: node.position_x, y: node.position_y },
+          position: { x: node.position_x || 0, y: node.position_y || 0 },
           data: {
             label: node.name,
             nodeType: node.node_type,
@@ -217,8 +218,8 @@ function ScenarioEditPageContent() {
         }))
         
         // 연결들을 React Flow 형식으로 변환
-        const flowEdges: ScenarioEdge[] = data.connections.map((conn: any, index: number) => ({
-          id: `edge-${index}`,
+        const flowEdges: ScenarioEdge[] = (data.connections || []).map((conn: any, index: number) => ({
+          id: conn.id || `edge-${index}`,
           source: conn.source_node_id,
           target: conn.target_node_id,
           label: conn.label,
@@ -236,16 +237,32 @@ function ScenarioEditPageContent() {
         
         // 노드 카운터 업데이트
         const maxNodeNum = Math.max(...flowNodes.map(n => {
-          const match = n.id.match(/\d+$/)
+          const match = n.id.match(/\\d+$/)
           return match ? parseInt(match[0]) : 0
         }), 0)
         setNodeCounter(maxNodeNum + 1)
+        
+        setHasUnsavedChanges(false)
+      } else if (response.status === 401) {
+        toast({
+          title: "인증 만료",
+          description: "다시 로그인해주세요.",
+          variant: "destructive",
+        })
+        localStorage.removeItem("access_token")
+        router.push("/login")
+      } else if (response.status === 404) {
+        setError("시나리오를 찾을 수 없습니다.")
+      } else {
+        throw new Error(`HTTP ${response.status}`)
       }
     } catch (error) {
       console.error("Load scenario error:", error)
+      const errorMessage = error instanceof Error ? error.message : "시나리오를 불러오는데 실패했습니다."
+      setError(errorMessage)
       toast({
         title: "로드 실패",
-        description: "시나리오를 불러오는데 실패했습니다.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -255,12 +272,15 @@ function ScenarioEditPageContent() {
 
   // 엣지 연결 처리
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({
-      ...params,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-      },
-    }, eds)),
+    (params: Connection) => {
+      setEdges((eds) => addEdge({
+        ...params,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+        },
+      }, eds))
+      setHasUnsavedChanges(true)
+    },
     [setEdges]
   )
 
@@ -278,8 +298,19 @@ function ScenarioEditPageContent() {
     
     // 시작 노드 찾기
     const startNode = currentNodes.find(node => node.data.nodeType === 'start')
-    if (!startNode) return
+    if (!startNode) {
+      // 시작 노드가 없으면 첫 번째 노드를 시작점으로 사용
+      const firstNode = currentNodes[0]
+      if (firstNode) {
+        layoutFromNode(firstNode, currentNodes, currentEdges)
+      }
+      return
+    }
     
+    layoutFromNode(startNode, currentNodes, currentEdges)
+  }
+  
+  const layoutFromNode = (startNode: Node, currentNodes: Node[], currentEdges: Edge[]) => {
     const visited = new Set<string>()
     const positioned = new Map<string, { x: number; y: number }>()
     const VERTICAL_SPACING = 150
@@ -321,6 +352,8 @@ function ScenarioEditPageContent() {
       return newPosition ? { ...node, position: newPosition } : node
     }))
     
+    setHasUnsavedChanges(true)
+    
     // 화면에 맞춤
     setTimeout(() => fitView(), 100)
   }
@@ -338,94 +371,8 @@ function ScenarioEditPageContent() {
       }
     })))
     
+    setHasUnsavedChanges(true)
     setTimeout(() => fitView(), 100)
-  }
-  
-  const exportScenario = () => {
-    if (!scenario) return
-    
-    return {
-      scenario: {
-        name: scenario.name,
-        description: scenario.description,
-        category: scenario.category,
-        version: scenario.version
-      },
-      nodes: getNodes().map(node => ({
-        id: node.id,
-        type: node.data.nodeType,
-        name: node.data.label,
-        position: node.position,
-        config: node.data.config
-      })),
-      edges: getEdges().map(edge => ({
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-        condition: edge.data?.condition
-      }))
-    }
-  }
-  
-  const importScenario = async (importData: any) => {
-    try {
-      // 기존 노드와 연결 초기화
-      setNodes([])
-      setEdges([])
-      
-      // 새 데이터로 설정
-      const importedNodes: ScenarioNode[] = importData.nodes.map((node: any) => ({
-        id: node.id,
-        type: node.type,
-        position: node.position || { x: 0, y: 0 },
-        data: {
-          label: node.name,
-          nodeType: node.type,
-          config: node.config || {}
-        }
-      }))
-      
-      const importedEdges: ScenarioEdge[] = importData.edges.map((edge: any, index: number) => ({
-        id: `imported-edge-${index}`,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-        },
-        data: {
-          condition: edge.condition,
-          label: edge.label
-        }
-      }))
-      
-      setNodes(importedNodes)
-      setEdges(importedEdges)
-      
-      // 시나리오 기본 정보 업데이트
-      if (scenario && importData.scenario) {
-        setScenario({
-          ...scenario,
-          name: importData.scenario.name || scenario.name,
-          description: importData.scenario.description || scenario.description,
-          category: importData.scenario.category || scenario.category
-        })
-      }
-      
-      // 노드 카운터 업데이트
-      const maxNodeNum = Math.max(...importedNodes.map(n => {
-        const match = n.id.match(/\d+$/)
-        return match ? parseInt(match[0]) : 0
-      }), 0)
-      setNodeCounter(maxNodeNum + 1)
-      
-      // 화면에 맞춤
-      setTimeout(() => fitView(), 500)
-      
-    } catch (error) {
-      console.error('Import scenario error:', error)
-      throw error
-    }
   }
   
   // 새 노드 추가
@@ -464,6 +411,7 @@ function ScenarioEditPageContent() {
     
     setNodes((nds) => [...nds, newNode])
     setNodeCounter(nodeCounter + 1)
+    setHasUnsavedChanges(true)
   }
 
   const getNodeLabel = (nodeType: string) => {
@@ -484,6 +432,7 @@ function ScenarioEditPageContent() {
       setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id))
       setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id))
       setSelectedNode(null)
+      setHasUnsavedChanges(true)
     }
   }
 
@@ -507,6 +456,7 @@ function ScenarioEditPageContent() {
         return node
       })
     )
+    setHasUnsavedChanges(true)
   }
 
   // 노드 설정 업데이트
@@ -532,6 +482,7 @@ function ScenarioEditPageContent() {
         return node
       })
     )
+    setHasUnsavedChanges(true)
   }
 
   // 시나리오 저장
@@ -541,21 +492,36 @@ function ScenarioEditPageContent() {
     setIsSaving(true)
     try {
       const accessToken = localStorage.getItem("access_token")
-      
-      // 기존 노드 및 연결 삭제 후 새로 생성하는 방식
-      // 실제로는 더 효율적인 업데이트 로직이 필요할 수 있음
-      
-      // 모든 기존 노드 삭제
-      for (const node of scenario.nodes) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/nodes/${node.node_id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${accessToken}` },
+      if (!accessToken) {
+        toast({
+          title: "인증 필요",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
         })
+        router.push("/login")
+        return
       }
       
-      // 새 노드들 생성
-      for (const node of nodes) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/nodes`, {
+      const currentNodes = getNodes()
+      const currentEdges = getEdges()
+      
+      // 1. 기존 노드 및 연결 삭제
+      if (scenario.nodes && scenario.nodes.length > 0) {
+        for (const node of scenario.nodes) {
+          try {
+            await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/nodes/${node.node_id}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${accessToken}` },
+            })
+          } catch (error) {
+            console.warn(`Failed to delete node ${node.node_id}:`, error)
+          }
+        }
+      }
+      
+      // 2. 새 노드들 생성
+      const nodePromises = currentNodes.map(async (node) => {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/nodes`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -571,11 +537,20 @@ function ScenarioEditPageContent() {
             config: node.data.config || {}
           }),
         })
-      }
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(`Node creation failed: ${errorData.detail || response.statusText}`)
+        }
+        
+        return response.json()
+      })
       
-      // 연결들 생성
-      for (const edge of edges) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/connections`, {
+      await Promise.all(nodePromises)
+      
+      // 3. 연결들 생성
+      const connectionPromises = currentEdges.map(async (edge) => {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/connections`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -585,21 +560,37 @@ function ScenarioEditPageContent() {
             scenario_id: scenario.id,
             source_node_id: edge.source,
             target_node_id: edge.target,
-            condition: edge.data?.condition,
-            label: edge.data?.label || edge.label
+            condition: edge.data?.condition || null,
+            label: edge.data?.label || edge.label || null
           }),
         })
-      }
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(`Connection creation failed: ${errorData.detail || response.statusText}`)
+        }
+        
+        return response.json()
+      })
+      
+      await Promise.all(connectionPromises)
+      
+      setLastSaved(new Date())
+      setHasUnsavedChanges(false)
       
       toast({
         title: "저장 완료",
         description: "시나리오가 저장되었습니다.",
       })
+      
+      // 시나리오 데이터 다시 로드하여 최신 상태 유지
+      await loadScenario(scenario.id)
+      
     } catch (error) {
       console.error("Save scenario error:", error)
       toast({
         title: "저장 실패",
-        description: "시나리오 저장 중 오류가 발생했습니다.",
+        description: error instanceof Error ? error.message : "시나리오 저장 중 오류가 발생했습니다.",
         variant: "destructive",
       })
     } finally {
@@ -607,11 +598,43 @@ function ScenarioEditPageContent() {
     }
   }
 
+  // 브라우저 닫기 시 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className="ml-2">시나리오를 불러오는 중...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+          </AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button variant="outline" onClick={() => router.push("/scenarios")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            목록으로 돌아가기
+          </Button>
+        </div>
       </div>
     )
   }
@@ -629,17 +652,55 @@ function ScenarioEditPageContent() {
       {/* 헤더 */}
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => router.push("/scenarios")}>
+          <Button 
+            variant="ghost" 
+            onClick={() => {
+              if (hasUnsavedChanges) {
+                const confirmed = confirm("저장하지 않은 변경사항이 있습니다. 정말로 나가시겠습니까?")
+                if (!confirmed) return
+              }
+              router.push("/scenarios")
+            }}
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
             목록으로
           </Button>
           <div>
-            <h1 className="text-lg font-semibold">{scenario.name}</h1>
-            <p className="text-sm text-gray-600">버전 {scenario.version}</p>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-lg font-semibold">{scenario.name}</h1>
+              {hasUnsavedChanges && (
+                <Badge variant="outline" className="text-orange-600 border-orange-600">
+                  변경됨
+                </Badge>
+              )}
+              {lastSaved && !hasUnsavedChanges && (
+                <Badge variant="outline" className="text-green-600 border-green-600">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  저장됨
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-gray-600">
+              버전 {scenario.version}
+              {lastSaved && (
+                <span className="ml-2">
+                  • 마지막 저장: {lastSaved.toLocaleTimeString('ko-KR')}
+                </span>
+              )}
+            </p>
           </div>
         </div>
         
         <div className="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            onClick={() => loadScenario(scenario.id)}
+            disabled={isLoading}
+            title="새로고침"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            새로고침
+          </Button>
           <Button 
             variant="outline" 
             onClick={autoLayoutVertical}
@@ -656,22 +717,21 @@ function ScenarioEditPageContent() {
             <LayoutGrid className="h-4 w-4 mr-2" />
             그리드
           </Button>
-          <ImportExportManager
-            onImport={importScenario}
-            onExport={exportScenario}
-            scenarioName={scenario.name}
-          />
           <Button variant="outline" onClick={() => router.push(`/scenarios/${scenario.id}/simulate`)}>
             <Play className="h-4 w-4 mr-2" />
             시뮬레이션
           </Button>
-          <Button onClick={saveScenario} disabled={isSaving}>
+          <Button 
+            onClick={saveScenario} 
+            disabled={isSaving || !hasUnsavedChanges}
+            variant={hasUnsavedChanges ? "default" : "outline"}
+          >
             {isSaving ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            저장
+            {isSaving ? "저장 중..." : "저장"}
           </Button>
         </div>
       </div>
@@ -719,30 +779,14 @@ function ScenarioEditPageContent() {
             <div className="p-4 border-t">
               <ScenarioStatusManager
                 scenario={scenario}
-                onStatusChange={handleStatusChange}
-              />
-            </div>
-            
-            {/* 버전 관리 */}
-            <div className="p-4 border-t">
-              <VersionManager
-                scenarioId={scenario.id}
-                currentVersion={scenario.version}
-              />
-            </div>
-            
-            {/* 협업 관리 */}
-            <div className="p-4 border-t">
-              <CollaborationManager
-                scenarioId={scenario.id}
-                currentUser={{
-                  id: "current_user", // 실제로는 인증된 사용자 정보
-                  name: "김개발",
-                  email: "kim@example.com"
-                }}
-                onUserAction={(action, nodeId) => {
-                  // 사용자 액션 처리
-                  console.log('User action:', action, nodeId)
+                onStatusChange={(newStatus) => {
+                  if (scenario) {
+                    setScenario({
+                      ...scenario,
+                      status: newStatus
+                    })
+                    setHasUnsavedChanges(true)
+                  }
                 }}
               />
             </div>
@@ -768,7 +812,7 @@ function ScenarioEditPageContent() {
             <Panel position="top-right">
               <div className="bg-white p-3 rounded-lg shadow-lg border space-y-3">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">시나리오 상태</p>
+                  <p className="text-xs text-gray-500 mb-1">시나리오 정보</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-gray-600">노드:</span>
@@ -779,6 +823,11 @@ function ScenarioEditPageContent() {
                       <span className="font-medium ml-1">{edges.length}</span>
                     </div>
                   </div>
+                  {hasUnsavedChanges && (
+                    <div className="text-xs text-orange-600 mt-1">
+                      변경사항이 있습니다
+                    </div>
+                  )}
                 </div>
                 
                 <div className="space-y-1">

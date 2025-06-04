@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { 
   Select, 
   SelectContent, 
@@ -58,8 +59,14 @@ import {
   Download,
   Share2,
   Archive,
-  Eye
+  Eye,
+  RefreshCw
 } from "lucide-react"
+
+interface User {
+  id: string
+  full_name: string
+}
 
 interface Scenario {
   id: string
@@ -69,17 +76,12 @@ interface Scenario {
   version: string
   status: "draft" | "testing" | "active" | "inactive" | "archived"
   is_template: boolean
-  created_by: {
-    id: string
-    full_name: string
-  }
-  updated_by?: {
-    id: string  
-    full_name: string
-  }
+  created_by: string
+  updated_by?: string
   deployed_at?: string
   created_at: string
   updated_at: string
+  scenario_metadata?: Record<string, any>
 }
 
 interface NewScenario {
@@ -87,6 +89,7 @@ interface NewScenario {
   description: string
   category: string
   is_template: boolean
+  scenario_metadata?: Record<string, any>
 }
 
 interface PaginationData {
@@ -94,6 +97,14 @@ interface PaginationData {
   size: number
   total: number
   pages: number
+}
+
+interface ScenariosResponse {
+  items?: Scenario[]
+  total?: number
+  page?: number
+  size?: number
+  pages?: number
 }
 
 export default function ScenariosPage() {
@@ -107,6 +118,7 @@ export default function ScenariosPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
@@ -124,134 +136,84 @@ export default function ScenariosPage() {
 
   useEffect(() => {
     fetchScenarios()
-  }, [pagination.page, statusFilter, categoryFilter, searchTerm, sortBy, sortOrder])
+  }, [pagination.page, statusFilter, categoryFilter, searchTerm])
 
   const fetchScenarios = async () => {
     setIsLoading(true)
     try {
       const accessToken = localStorage.getItem("access_token")
-      let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios?`
-      
+      if (!accessToken) {
+        toast({
+          title: "인증 필요",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
+        })
+        router.push("/login")
+        return
+      }
+
       const params = new URLSearchParams()
-      params.append("page", pagination.page.toString())
-      params.append("size", pagination.size.toString())
+      params.append("skip", ((pagination.page - 1) * pagination.size).toString())
+      params.append("limit", pagination.size.toString())
+      
       if (statusFilter !== "all") params.append("status", statusFilter)
       if (categoryFilter !== "all") params.append("category", categoryFilter)
-      if (searchTerm) params.append("search", searchTerm)
-      params.append("sort_by", sortBy)
-      params.append("sort_order", sortOrder)
+      if (searchTerm.trim()) params.append("search", searchTerm.trim())
       
-      const response = await fetch(`${url}${params.toString()}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setScenarios(data.items || mockScenarios)
-        setPagination({
-          page: data.page || 1,
-          size: data.size || 20,
-          total: data.total || mockScenarios.length,
-          pages: data.pages || Math.ceil(mockScenarios.length / 20)
+        const data: Scenario[] = await response.json()
+        
+        // API가 배열을 직접 반환하는 경우
+        if (Array.isArray(data)) {
+          setScenarios(data)
+          setPagination(prev => ({
+            ...prev,
+            total: data.length,
+            pages: Math.max(1, Math.ceil(data.length / prev.size))
+          }))
+        } else {
+          // API가 객체를 반환하는 경우
+          const responseData = data as unknown as ScenariosResponse
+          setScenarios(responseData.items || [])
+          setPagination({
+            page: responseData.page || pagination.page,
+            size: responseData.size || pagination.size,
+            total: responseData.total || 0,
+            pages: responseData.pages || 1
+          })
+        }
+      } else if (response.status === 401) {
+        toast({
+          title: "인증 만료",
+          description: "다시 로그인해주세요.",
+          variant: "destructive",
         })
+        localStorage.removeItem("access_token")
+        router.push("/login")
       } else {
-        // API가 없으면 목업 데이터 사용
-        setScenarios(mockScenarios)
-        setPagination({
-          page: 1,
-          size: 20,
-          total: mockScenarios.length,
-          pages: Math.ceil(mockScenarios.length / 20)
-        })
+        throw new Error(`HTTP ${response.status}`)
       }
     } catch (error) {
       console.error("Fetch scenarios error:", error)
-      // 에러 시 목업 데이터 사용
-      setScenarios(mockScenarios)
-      setPagination({
-        page: 1,
-        size: 20,
-        total: mockScenarios.length,
-        pages: Math.ceil(mockScenarios.length / 20)
+      toast({
+        title: "데이터 로드 실패",
+        description: "시나리오 목록을 불러오는데 실패했습니다.",
+        variant: "destructive",
       })
+      
+      // 에러 시 빈 배열로 설정
+      setScenarios([])
     } finally {
       setIsLoading(false)
     }
   }
-
-  // 목업 데이터
-  const mockScenarios: Scenario[] = [
-    {
-      id: "1",
-      name: "자동차보험 접수",
-      description: "자동차 보험 접수 관련 ARS 시나리오",
-      category: "보험접수",
-      version: "v2.1",
-      status: "active",
-      is_template: false,
-      created_by: { id: "1", full_name: "김운영" },
-      updated_by: { id: "1", full_name: "김운영" },
-      deployed_at: "2025-05-20T14:30:00Z",
-      created_at: "2025-05-01T09:00:00Z",
-      updated_at: "2025-05-20T14:00:00Z"
-    },
-    {
-      id: "2",
-      name: "화재보험 문의",
-      description: "화재보험 관련 문의 처리 시나리오",
-      category: "보험문의",
-      version: "v1.3",
-      status: "inactive",
-      is_template: false,
-      created_by: { id: "2", full_name: "이상담" },
-      updated_by: { id: "2", full_name: "이상담" },
-      created_at: "2025-04-15T09:00:00Z",
-      updated_at: "2025-05-18T10:00:00Z"
-    },
-    {
-      id: "3",
-      name: "생명보험 상담",
-      description: "생명보험 상담 및 안내 시나리오",
-      category: "보험상담",
-      version: "v3.0",
-      status: "active",
-      is_template: false,
-      created_by: { id: "3", full_name: "박상담" },
-      updated_by: { id: "3", full_name: "박상담" },
-      deployed_at: "2025-05-15T09:00:00Z",
-      created_at: "2025-03-01T09:00:00Z",
-      updated_at: "2025-05-15T15:30:00Z"
-    },
-    {
-      id: "4",
-      name: "고객센터 일반",
-      description: "일반적인 고객 문의 처리 시나리오",
-      category: "일반문의",
-      version: "v1.8",
-      status: "active",
-      is_template: false,
-      created_by: { id: "4", full_name: "최지원" },
-      updated_by: { id: "4", full_name: "최지원" },
-      deployed_at: "2025-05-10T11:00:00Z",
-      created_at: "2025-02-10T09:00:00Z",
-      updated_at: "2025-05-10T16:45:00Z"
-    },
-    {
-      id: "5",
-      name: "건강보험 안내",
-      description: "건강보험 관련 안내 시나리오",
-      category: "보험안내",
-      version: "v2.0",
-      status: "draft",
-      is_template: false,
-      created_by: { id: "1", full_name: "김운영" },
-      updated_by: { id: "1", full_name: "김운영" },
-      created_at: "2025-05-25T09:00:00Z",
-      updated_at: "2025-05-25T14:20:00Z"
-    }
-  ]
 
   const createScenario = async () => {
     if (!newScenario.name.trim()) {
@@ -263,19 +225,38 @@ export default function ScenariosPage() {
       return
     }
 
+    setIsCreating(true)
     try {
       const accessToken = localStorage.getItem("access_token")
+      if (!accessToken) {
+        toast({
+          title: "인증 필요",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
+        })
+        router.push("/login")
+        return
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(newScenario),
+        body: JSON.stringify({
+          name: newScenario.name.trim(),
+          description: newScenario.description.trim() || null,
+          category: newScenario.category || null,
+          is_template: newScenario.is_template,
+          scenario_metadata: newScenario.scenario_metadata || {}
+        }),
       })
 
       if (response.ok) {
         const createdScenario = await response.json()
+        
+        // 다이얼로그 닫기 및 폼 초기화
         setIsCreateDialogOpen(false)
         setNewScenario({
           name: "",
@@ -283,33 +264,114 @@ export default function ScenariosPage() {
           category: "",
           is_template: false
         })
+        
         toast({
           title: "시나리오 생성 성공",
           description: "새로운 시나리오가 생성되었습니다.",
         })
         
+        // 목록 새로고침
+        await fetchScenarios()
+        
         // 생성된 시나리오 편집 페이지로 이동
-        router.push(`/scenarios/${createdScenario.id}/edit`)
-      } else {
+        setTimeout(() => {
+          router.push(`/scenarios/${createdScenario.id}/edit`)
+        }, 500)
+      } else if (response.status === 401) {
         toast({
-          title: "생성 실패",
-          description: "시나리오 생성 중 오류가 발생했습니다.",
+          title: "인증 만료",
+          description: "다시 로그인해주세요.",
           variant: "destructive",
         })
+        localStorage.removeItem("access_token")
+        router.push("/login")
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || "시나리오 생성 실패")
       }
     } catch (error) {
       console.error("Create scenario error:", error)
-      // 목업에서는 생성 시뮬레이션
-      setIsCreateDialogOpen(false)
       toast({
-        title: "시나리오 생성 완료",
-        description: "새로운 시나리오가 생성되었습니다. (데모 모드)",
+        title: "생성 실패",
+        description: error instanceof Error ? error.message : "시나리오 생성 중 오류가 발생했습니다.",
+        variant: "destructive",
       })
-      setNewScenario({
-        name: "",
-        description: "",
-        category: "",
-        is_template: false
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const deleteScenario = async (scenarioId: string, scenarioName: string) => {
+    if (!confirm(`"${scenarioName}" 시나리오를 정말로 삭제하시겠습니까?\\n\\n이 작업은 되돌릴 수 없습니다.`)) {
+      return
+    }
+
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenarioId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        toast({
+          title: "삭제 완료",
+          description: "시나리오가 삭제되었습니다.",
+        })
+        
+        // 목록 새로고침
+        await fetchScenarios()
+      } else {
+        throw new Error("삭제 실패")
+      }
+    } catch (error) {
+      console.error("Delete scenario error:", error)
+      toast({
+        title: "삭제 실패",
+        description: "시나리오 삭제 중 오류가 발생했습니다.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const copyScenario = async (scenario: Scenario) => {
+    try {
+      // 먼저 새 시나리오 생성
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          name: `${scenario.name} (복사본)`,
+          description: scenario.description,
+          category: scenario.category,
+          is_template: scenario.is_template,
+          scenario_metadata: scenario.scenario_metadata || {}
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "복사 완료",
+          description: `"${scenario.name}" 시나리오가 복사되었습니다.`,
+        })
+        
+        // 목록 새로고침
+        await fetchScenarios()
+      } else {
+        throw new Error("복사 실패")
+      }
+    } catch (error) {
+      console.error("Copy scenario error:", error)
+      toast({
+        title: "복사 실패",
+        description: "시나리오 복사 중 오류가 발생했습니다.",
+        variant: "destructive",
       })
     }
   }
@@ -320,7 +382,13 @@ export default function ScenariosPage() {
 
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, page: 1 }))
-    fetchScenarios()
+  }
+
+  const resetFilters = () => {
+    setSearchTerm("")
+    setStatusFilter("all")
+    setCategoryFilter("all")
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
 
   const getStatusBadgeVariant = (status: string) => {
@@ -351,10 +419,7 @@ export default function ScenariosPage() {
         router.push(`/scenarios/${scenario.id}/edit`)
         break
       case "copy":
-        toast({
-          title: "복사 완료",
-          description: `"${scenario.name}" 시나리오가 복사되었습니다.`,
-        })
+        copyScenario(scenario)
         break
       case "simulate":
         router.push(`/scenarios/${scenario.id}/simulate`)
@@ -372,12 +437,7 @@ export default function ScenariosPage() {
         })
         break
       case "delete":
-        if (confirm("정말로 이 시나리오를 삭제하시겠습니까?")) {
-          toast({
-            title: "삭제 완료",
-            description: "시나리오가 삭제되었습니다.",
-          })
-        }
+        deleteScenario(scenario.id, scenario.name)
         break
       default:
         break
@@ -396,74 +456,104 @@ export default function ScenariosPage() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* 헤더 */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold">ARS 시나리오 관리</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             콜센터 ARS 시나리오를 생성하고 관리합니다
           </p>
+          <div className="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
+            <span>총 {pagination.total}개</span>
+            <span>•</span>
+            <span>{pagination.page}/{pagination.pages} 페이지</span>
+          </div>
         </div>
         
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="lg">
-              <Plus className="h-4 w-4 mr-2" />
-              새 시나리오
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>새 시나리오 생성</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">시나리오 이름</Label>
-                <Input
-                  id="name"
-                  value={newScenario.name}
-                  onChange={(e) => setNewScenario({...newScenario, name: e.target.value})}
-                  placeholder="시나리오 이름을 입력하세요"
-                />
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={fetchScenarios} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            새로고침
+          </Button>
+          
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="lg">
+                <Plus className="h-4 w-4 mr-2" />
+                새 시나리오
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>새 시나리오 생성</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">시나리오 이름 *</Label>
+                  <Input
+                    id="name"
+                    value={newScenario.name}
+                    onChange={(e) => setNewScenario({...newScenario, name: e.target.value})}
+                    placeholder="시나리오 이름을 입력하세요"
+                    disabled={isCreating}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="description">설명</Label>
+                  <Textarea
+                    id="description"
+                    value={newScenario.description}
+                    onChange={(e) => setNewScenario({...newScenario, description: e.target.value})}
+                    placeholder="시나리오 설명을 입력하세요"
+                    rows={3}
+                    disabled={isCreating}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="category">카테고리</Label>
+                  <Select 
+                    value={newScenario.category} 
+                    onValueChange={(value) => setNewScenario({...newScenario, category: value})}
+                    disabled={isCreating}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="카테고리를 선택하세요" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="보험접수">보험접수</SelectItem>
+                      <SelectItem value="보험상담">보험상담</SelectItem>
+                      <SelectItem value="보험문의">보험문의</SelectItem>
+                      <SelectItem value="일반문의">일반문의</SelectItem>
+                      <SelectItem value="보험안내">보험안내</SelectItem>
+                      <SelectItem value="고객지원">고객지원</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex justify-end space-x-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    disabled={isCreating}
+                  >
+                    취소
+                  </Button>
+                  <Button onClick={createScenario} disabled={isCreating}>
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        생성 중...
+                      </>
+                    ) : (
+                      "생성"
+                    )}
+                  </Button>
+                </div>
               </div>
-              
-              <div>
-                <Label htmlFor="description">설명</Label>
-                <Input
-                  id="description"
-                  value={newScenario.description}
-                  onChange={(e) => setNewScenario({...newScenario, description: e.target.value})}
-                  placeholder="시나리오 설명을 입력하세요"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="category">카테고리</Label>
-                <Select 
-                  value={newScenario.category} 
-                  onValueChange={(value) => setNewScenario({...newScenario, category: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="카테고리를 선택하세요" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="보험접수">보험접수</SelectItem>
-                    <SelectItem value="보험상담">보험상담</SelectItem>
-                    <SelectItem value="보험문의">보험문의</SelectItem>
-                    <SelectItem value="일반문의">일반문의</SelectItem>
-                    <SelectItem value="보험안내">보험안내</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  취소
-                </Button>
-                <Button onClick={createScenario}>생성</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* 검색 및 필터 */}
@@ -473,7 +563,7 @@ export default function ScenariosPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="시나리오명으로 검색..."
+                placeholder="시나리오명 또는 설명으로 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -485,11 +575,15 @@ export default function ScenariosPage() {
           <Button onClick={handleSearch}>
             검색
           </Button>
+          
+          <Button variant="outline" onClick={resetFilters}>
+            초기화
+          </Button>
         </div>
         
         <div className="flex space-x-4">
           <div className="flex items-center space-x-2">
-            <Label className="text-sm">필터:</Label>
+            <Label className="text-sm">상태:</Label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[130px]">
                 <SelectValue />
@@ -506,6 +600,7 @@ export default function ScenariosPage() {
           </div>
           
           <div className="flex items-center space-x-2">
+            <Label className="text-sm">카테고리:</Label>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[130px]">
                 <SelectValue placeholder="카테고리" />
@@ -517,24 +612,7 @@ export default function ScenariosPage() {
                 <SelectItem value="보험문의">보험문의</SelectItem>
                 <SelectItem value="일반문의">일반문의</SelectItem>
                 <SelectItem value="보험안내">보험안내</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Select value={`${sortBy}:${sortOrder}`} onValueChange={(value) => {
-              const [field, order] = value.split(':')
-              setSortBy(field)
-              setSortOrder(order)
-            }}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="정렬" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated_at:desc">최근 수정</SelectItem>
-                <SelectItem value="created_at:desc">최근 생성</SelectItem>
-                <SelectItem value="name:asc">이름 순</SelectItem>
-                <SelectItem value="status:asc">상태 순</SelectItem>
+                <SelectItem value="고객지원">고객지원</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -550,7 +628,7 @@ export default function ScenariosPage() {
               <TableHead>상태</TableHead>
               <TableHead>버전</TableHead>
               <TableHead>최종수정일</TableHead>
-              <TableHead>작성자</TableHead>
+              <TableHead>생성자</TableHead>
               <TableHead className="text-right">액션</TableHead>
             </TableRow>
           </TableHeader>
@@ -561,11 +639,20 @@ export default function ScenariosPage() {
                   <div>
                     <div className="font-medium">{scenario.name}</div>
                     {scenario.description && (
-                      <div className="text-sm text-muted-foreground">{scenario.description}</div>
+                      <div className="text-sm text-muted-foreground line-clamp-1">
+                        {scenario.description}
+                      </div>
                     )}
                     {scenario.category && (
                       <div className="text-xs text-muted-foreground mt-1">
-                        카테고리: {scenario.category}
+                        <Badge variant="secondary" className="text-xs">
+                          {scenario.category}
+                        </Badge>
+                        {scenario.is_template && (
+                          <Badge variant="outline" className="text-xs ml-1">
+                            템플릿
+                          </Badge>
+                        )}
                       </div>
                     )}
                   </div>
@@ -590,12 +677,10 @@ export default function ScenariosPage() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm">{scenario.created_by.full_name}</div>
-                  {scenario.updated_by && scenario.updated_by.id !== scenario.created_by.id && (
-                    <div className="text-xs text-muted-foreground">
-                      수정: {scenario.updated_by.full_name}
-                    </div>
-                  )}
+                  <div className="text-sm">생성자 ID: {scenario.created_by}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(scenario.created_at).toLocaleDateString('ko-KR')}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end space-x-2">
@@ -657,12 +742,12 @@ export default function ScenariosPage() {
           </TableBody>
         </Table>
         
-        {scenarios.length === 0 && (
+        {scenarios.length === 0 && !isLoading && (
           <div className="text-center py-12">
             <div className="text-muted-foreground">
               <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg">조건에 맞는 시나리오가 없습니다</p>
-              <p className="text-sm">다른 검색 조건을 사용해보세요.</p>
+              <p className="text-sm">새로운 시나리오를 생성하거나 다른 검색 조건을 사용해보세요.</p>
             </div>
           </div>
         )}
