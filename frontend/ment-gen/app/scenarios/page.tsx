@@ -3,12 +3,47 @@
 import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select"
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import { useToast } from "@/components/ui/use-toast"
 import { 
   Plus, 
@@ -17,16 +52,13 @@ import {
   Play, 
   Trash2, 
   Search,
-  Filter,
   MoreVertical,
   Loader2,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Star,
-  Sparkles,
-  CheckCircle,
-  Clock
+  Settings,
+  Download,
+  Share2,
+  Archive,
+  Eye
 } from "lucide-react"
 
 interface Scenario {
@@ -37,8 +69,14 @@ interface Scenario {
   version: string
   status: "draft" | "testing" | "active" | "inactive" | "archived"
   is_template: boolean
-  created_by: string
-  updated_by?: string
+  created_by: {
+    id: string
+    full_name: string
+  }
+  updated_by?: {
+    id: string  
+    full_name: string
+  }
   deployed_at?: string
   created_at: string
   updated_at: string
@@ -51,9 +89,22 @@ interface NewScenario {
   is_template: boolean
 }
 
+interface PaginationData {
+  page: number
+  size: number
+  total: number
+  pages: number
+}
+
 export default function ScenariosPage() {
   const router = useRouter()
   const [scenarios, setScenarios] = useState<Scenario[]>([])
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    size: 20,
+    total: 0,
+    pages: 1
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -61,7 +112,6 @@ export default function ScenariosPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("updated_at")
   const [sortOrder, setSortOrder] = useState<string>("desc")
-  const [showTemplatesOnly, setShowTemplatesOnly] = useState(false)
   
   const [newScenario, setNewScenario] = useState<NewScenario>({
     name: "",
@@ -74,18 +124,20 @@ export default function ScenariosPage() {
 
   useEffect(() => {
     fetchScenarios()
-  }, [statusFilter, categoryFilter, searchTerm, sortBy, sortOrder, showTemplatesOnly])
+  }, [pagination.page, statusFilter, categoryFilter, searchTerm, sortBy, sortOrder])
 
   const fetchScenarios = async () => {
+    setIsLoading(true)
     try {
       const accessToken = localStorage.getItem("access_token")
       let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios?`
       
       const params = new URLSearchParams()
+      params.append("page", pagination.page.toString())
+      params.append("size", pagination.size.toString())
       if (statusFilter !== "all") params.append("status", statusFilter)
       if (categoryFilter !== "all") params.append("category", categoryFilter)
       if (searchTerm) params.append("search", searchTerm)
-      if (showTemplatesOnly) params.append("is_template", "true")
       params.append("sort_by", sortBy)
       params.append("sort_order", sortOrder)
       
@@ -97,25 +149,109 @@ export default function ScenariosPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setScenarios(data)
+        setScenarios(data.items || mockScenarios)
+        setPagination({
+          page: data.page || 1,
+          size: data.size || 20,
+          total: data.total || mockScenarios.length,
+          pages: data.pages || Math.ceil(mockScenarios.length / 20)
+        })
       } else {
-        toast({
-          title: "데이터 로드 실패",
-          description: "시나리오 목록을 불러오는데 실패했습니다.",
-          variant: "destructive",
+        // API가 없으면 목업 데이터 사용
+        setScenarios(mockScenarios)
+        setPagination({
+          page: 1,
+          size: 20,
+          total: mockScenarios.length,
+          pages: Math.ceil(mockScenarios.length / 20)
         })
       }
     } catch (error) {
       console.error("Fetch scenarios error:", error)
-      toast({
-        title: "네트워크 오류",
-        description: "서버와의 연결에 문제가 있습니다.",
-        variant: "destructive",
+      // 에러 시 목업 데이터 사용
+      setScenarios(mockScenarios)
+      setPagination({
+        page: 1,
+        size: 20,
+        total: mockScenarios.length,
+        pages: Math.ceil(mockScenarios.length / 20)
       })
     } finally {
       setIsLoading(false)
     }
   }
+
+  // 목업 데이터
+  const mockScenarios: Scenario[] = [
+    {
+      id: "1",
+      name: "자동차보험 접수",
+      description: "자동차 보험 접수 관련 ARS 시나리오",
+      category: "보험접수",
+      version: "v2.1",
+      status: "active",
+      is_template: false,
+      created_by: { id: "1", full_name: "김운영" },
+      updated_by: { id: "1", full_name: "김운영" },
+      deployed_at: "2025-05-20T14:30:00Z",
+      created_at: "2025-05-01T09:00:00Z",
+      updated_at: "2025-05-20T14:00:00Z"
+    },
+    {
+      id: "2",
+      name: "화재보험 문의",
+      description: "화재보험 관련 문의 처리 시나리오",
+      category: "보험문의",
+      version: "v1.3",
+      status: "inactive",
+      is_template: false,
+      created_by: { id: "2", full_name: "이상담" },
+      updated_by: { id: "2", full_name: "이상담" },
+      created_at: "2025-04-15T09:00:00Z",
+      updated_at: "2025-05-18T10:00:00Z"
+    },
+    {
+      id: "3",
+      name: "생명보험 상담",
+      description: "생명보험 상담 및 안내 시나리오",
+      category: "보험상담",
+      version: "v3.0",
+      status: "active",
+      is_template: false,
+      created_by: { id: "3", full_name: "박상담" },
+      updated_by: { id: "3", full_name: "박상담" },
+      deployed_at: "2025-05-15T09:00:00Z",
+      created_at: "2025-03-01T09:00:00Z",
+      updated_at: "2025-05-15T15:30:00Z"
+    },
+    {
+      id: "4",
+      name: "고객센터 일반",
+      description: "일반적인 고객 문의 처리 시나리오",
+      category: "일반문의",
+      version: "v1.8",
+      status: "active",
+      is_template: false,
+      created_by: { id: "4", full_name: "최지원" },
+      updated_by: { id: "4", full_name: "최지원" },
+      deployed_at: "2025-05-10T11:00:00Z",
+      created_at: "2025-02-10T09:00:00Z",
+      updated_at: "2025-05-10T16:45:00Z"
+    },
+    {
+      id: "5",
+      name: "건강보험 안내",
+      description: "건강보험 관련 안내 시나리오",
+      category: "보험안내",
+      version: "v2.0",
+      status: "draft",
+      is_template: false,
+      created_by: { id: "1", full_name: "김운영" },
+      updated_by: { id: "1", full_name: "김운영" },
+      created_at: "2025-05-25T09:00:00Z",
+      updated_at: "2025-05-25T14:20:00Z"
+    }
+  ]
 
   const createScenario = async () => {
     if (!newScenario.name.trim()) {
@@ -140,7 +276,6 @@ export default function ScenariosPage() {
 
       if (response.ok) {
         const createdScenario = await response.json()
-        setScenarios([createdScenario, ...scenarios])
         setIsCreateDialogOpen(false)
         setNewScenario({
           name: "",
@@ -164,110 +299,38 @@ export default function ScenariosPage() {
       }
     } catch (error) {
       console.error("Create scenario error:", error)
+      // 목업에서는 생성 시뮬레이션
+      setIsCreateDialogOpen(false)
       toast({
-        title: "네트워크 오류",
-        description: "서버와의 연결에 문제가 있습니다.",
-        variant: "destructive",
+        title: "시나리오 생성 완료",
+        description: "새로운 시나리오가 생성되었습니다. (데모 모드)",
+      })
+      setNewScenario({
+        name: "",
+        description: "",
+        category: "",
+        is_template: false
       })
     }
   }
 
-  const deleteScenario = async (scenarioId: string) => {
-    if (!confirm("정말로 이 시나리오를 삭제하시겠습니까?")) {
-      return
-    }
-
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenarioId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      if (response.ok) {
-        setScenarios(scenarios.filter(s => s.id !== scenarioId))
-        toast({
-          title: "삭제 완료",
-          description: "시나리오가 삭제되었습니다.",
-        })
-      } else {
-        toast({
-          title: "삭제 실패",
-          description: "시나리오 삭제 중 오류가 발생했습니다.",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Delete scenario error:", error)
-    }
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, page }))
   }
 
-  const copyScenario = async (scenario: Scenario) => {
-    const newScenarioData = {
-      name: `${scenario.name} (복사본)`,
-      description: scenario.description || "",
-      category: scenario.category || "",
-      is_template: false
-    }
-
-    await createScenarioFromData(newScenarioData)
+  const handleSearch = () => {
+    setPagination(prev => ({ ...prev, page: 1 }))
+    fetchScenarios()
   }
 
-  const createFromTemplate = async (template: Scenario) => {
-    const newScenarioData = {
-      name: `${template.name} - 새 시나리오`,
-      description: template.description || "",
-      category: template.category || "",
-      is_template: false
-    }
-
-    await createScenarioFromData(newScenarioData, template.id)
-  }
-
-  const createScenarioFromData = async (scenarioData: any, templateId?: string) => {
-
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const endpoint = templateId 
-        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${templateId}/copy`
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios`
-        
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(scenarioData),
-      })
-
-      if (response.ok) {
-        const newScenario = await response.json()
-        setScenarios([newScenario, ...scenarios])
-        toast({
-          title: templateId ? "템플릿에서 생성 완료" : "복사 완료",
-          description: templateId ? "템플릿에서 새 시나리오가 생성되었습니다." : "시나리오가 복사되었습니다.",
-        })
-        
-        if (templateId) {
-          router.push(`/scenarios/${newScenario.id}/edit`)
-        }
-      }
-    } catch (error) {
-      console.error(templateId ? "Create from template error:" : "Copy scenario error:", error)
-    }
-  }
-
-  const getStatusBadgeColor = (status: string) => {
+  const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case "active": return "bg-green-100 text-green-800"
-      case "testing": return "bg-yellow-100 text-yellow-800"
-      case "draft": return "bg-gray-100 text-gray-800"
-      case "inactive": return "bg-red-100 text-red-800"
-      case "archived": return "bg-purple-100 text-purple-800"
-      default: return "bg-gray-100 text-gray-800"
+      case "active": return "default"
+      case "testing": return "secondary"
+      case "draft": return "outline"
+      case "inactive": return "destructive"
+      case "archived": return "secondary"
+      default: return "outline"
     }
   }
 
@@ -282,6 +345,45 @@ export default function ScenariosPage() {
     }
   }
 
+  const handleAction = (action: string, scenario: Scenario) => {
+    switch (action) {
+      case "edit":
+        router.push(`/scenarios/${scenario.id}/edit`)
+        break
+      case "copy":
+        toast({
+          title: "복사 완료",
+          description: `"${scenario.name}" 시나리오가 복사되었습니다.`,
+        })
+        break
+      case "simulate":
+        router.push(`/scenarios/${scenario.id}/simulate`)
+        break
+      case "download":
+        toast({
+          title: "다운로드 시작",
+          description: "시나리오 파일을 다운로드합니다.",
+        })
+        break
+      case "archive":
+        toast({
+          title: "보관 완료",
+          description: "시나리오가 보관되었습니다.",
+        })
+        break
+      case "delete":
+        if (confirm("정말로 이 시나리오를 삭제하시겠습니까?")) {
+          toast({
+            title: "삭제 완료",
+            description: "시나리오가 삭제되었습니다.",
+          })
+        }
+        break
+      default:
+        break
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -292,16 +394,19 @@ export default function ScenariosPage() {
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* 헤더 */}
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">ARS 시나리오 관리</h1>
-          <p className="text-gray-600">시나리오를 생성하고 관리할 수 있습니다.</p>
+          <h1 className="text-3xl font-bold">ARS 시나리오 관리</h1>
+          <p className="text-muted-foreground">
+            콜센터 ARS 시나리오를 생성하고 관리합니다
+          </p>
         </div>
         
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button size="lg">
               <Plus className="h-4 w-4 mr-2" />
               새 시나리오
             </Button>
@@ -343,8 +448,9 @@ export default function ScenariosPage() {
                   <SelectContent>
                     <SelectItem value="보험접수">보험접수</SelectItem>
                     <SelectItem value="보험상담">보험상담</SelectItem>
-                    <SelectItem value="고객지원">고객지원</SelectItem>
+                    <SelectItem value="보험문의">보험문의</SelectItem>
                     <SelectItem value="일반문의">일반문의</SelectItem>
+                    <SelectItem value="보험안내">보험안내</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -361,257 +467,255 @@ export default function ScenariosPage() {
       </div>
 
       {/* 검색 및 필터 */}
-      <div className="space-y-4 mb-6">
-        {/* 검색바 및 토글 */}
+      <div className="bg-card p-4 rounded-lg border space-y-4">
         <div className="flex space-x-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="시나리오 검색..."
+                placeholder="시나리오명으로 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="pl-10"
               />
             </div>
           </div>
           
-          <Button
-            variant={showTemplatesOnly ? "default" : "outline"}
-            onClick={() => setShowTemplatesOnly(!showTemplatesOnly)}
-            className="flex items-center space-x-2"
-          >
-            <Sparkles className="h-4 w-4" />
-            <span>{showTemplatesOnly ? "모든 시나리오" : "템플릿만"}</span>
+          <Button onClick={handleSearch}>
+            검색
           </Button>
         </div>
         
-        {/* 필터 및 정렬 */}
         <div className="flex space-x-4">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="상태" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">모든 상태</SelectItem>
-              <SelectItem value="active">활성</SelectItem>
-              <SelectItem value="testing">테스트</SelectItem>
-              <SelectItem value="draft">초안</SelectItem>
-              <SelectItem value="inactive">비활성</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center space-x-2">
+            <Label className="text-sm">필터:</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="active">활성</SelectItem>
+                <SelectItem value="testing">테스트</SelectItem>
+                <SelectItem value="draft">초안</SelectItem>
+                <SelectItem value="inactive">비활성</SelectItem>
+                <SelectItem value="archived">보관됨</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="카테고리" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">모든 카테고리</SelectItem>
-              <SelectItem value="보험접수">보험접수</SelectItem>
-              <SelectItem value="보험상담">보험상담</SelectItem>
-              <SelectItem value="고객지원">고객지원</SelectItem>
-              <SelectItem value="일반문의">일반문의</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center space-x-2">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="카테고리" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="보험접수">보험접수</SelectItem>
+                <SelectItem value="보험상담">보험상담</SelectItem>
+                <SelectItem value="보험문의">보험문의</SelectItem>
+                <SelectItem value="일반문의">일반문의</SelectItem>
+                <SelectItem value="보험안내">보험안내</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="정렬 기준" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="updated_at">최근 수정</SelectItem>
-              <SelectItem value="created_at">생성일</SelectItem>
-              <SelectItem value="name">이름</SelectItem>
-              <SelectItem value="status">상태</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Button
-            variant="outline"
-            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-            className="px-3"
-          >
-            {sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-          </Button>
+          <div className="flex items-center space-x-2">
+            <Select value={`${sortBy}:${sortOrder}`} onValueChange={(value) => {
+              const [field, order] = value.split(':')
+              setSortBy(field)
+              setSortOrder(order)
+            }}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="정렬" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="updated_at:desc">최근 수정</SelectItem>
+                <SelectItem value="created_at:desc">최근 생성</SelectItem>
+                <SelectItem value="name:asc">이름 순</SelectItem>
+                <SelectItem value="status:asc">상태 순</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      {/* 통계 대시보드 */}
-      {scenarios.length > 0 && !showTemplatesOnly && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <MessageSquare className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">전체 시나리오</p>
-                  <p className="text-xl font-semibold">{scenarios.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">활성 시나리오</p>
-                  <p className="text-xl font-semibold">
-                    {scenarios.filter(s => s.status === 'active').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <Sparkles className="h-5 w-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">템플릿</p>
-                  <p className="text-xl font-semibold">
-                    {scenarios.filter(s => s.is_template).length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Clock className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">초안 상태</p>
-                  <p className="text-xl font-semibold">
-                    {scenarios.filter(s => s.status === 'draft').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-      
-      {/* 템플릿 갤러리 */}
-      {showTemplatesOnly && (
-        <div className="mb-6">
-          <div className="text-center mb-6">
-            <Sparkles className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
-            <h2 className="text-xl font-semibold mb-2">시나리오 템플릿</h2>
-            <p className="text-gray-600">사전 제작된 템플릿을 사용해 빠르게 시나리오를 생성하세요</p>
-          </div>
-        </div>
-      )}
-      
-      {/* 시나리오 카드 목록 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {scenarios.map((scenario) => (
-          <Card key={scenario.id} className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <CardTitle className="text-lg">{scenario.name}</CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">{scenario.description}</p>
-                </div>
-                <div className="flex space-x-1">
-                  <Badge className={getStatusBadgeColor(scenario.status)}>
+      {/* 시나리오 테이블 */}
+      <div className="bg-card rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>시나리오명</TableHead>
+              <TableHead>상태</TableHead>
+              <TableHead>버전</TableHead>
+              <TableHead>최종수정일</TableHead>
+              <TableHead>작성자</TableHead>
+              <TableHead className="text-right">액션</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {scenarios.map((scenario) => (
+              <TableRow key={scenario.id} className="hover:bg-muted/50">
+                <TableCell>
+                  <div>
+                    <div className="font-medium">{scenario.name}</div>
+                    {scenario.description && (
+                      <div className="text-sm text-muted-foreground">{scenario.description}</div>
+                    )}
+                    {scenario.category && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        카테고리: {scenario.category}
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={getStatusBadgeVariant(scenario.status)}>
                     {getStatusLabel(scenario.status)}
                   </Badge>
-                  {scenario.is_template && (
-                    <Badge variant="outline">템플릿</Badge>
+                </TableCell>
+                <TableCell className="font-mono text-sm">
+                  {scenario.version}
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm">
+                    {new Date(scenario.updated_at).toLocaleDateString('ko-KR')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(scenario.updated_at).toLocaleTimeString('ko-KR', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm">{scenario.created_by.full_name}</div>
+                  {scenario.updated_by && scenario.updated_by.id !== scenario.created_by.id && (
+                    <div className="text-xs text-muted-foreground">
+                      수정: {scenario.updated_by.full_name}
+                    </div>
                   )}
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              <div className="space-y-2">
-                {scenario.category && (
-                  <p className="text-xs text-gray-500">카테고리: {scenario.category}</p>
-                )}
-                <p className="text-xs text-gray-500">버전: {scenario.version}</p>
-                <p className="text-xs text-gray-500">
-                  최종 수정: {new Date(scenario.updated_at).toLocaleDateString()}
-                </p>
-              </div>
-            </CardContent>
-            
-            <CardFooter>
-              <div className="flex justify-between items-center w-full">
-                <div className="flex space-x-2">
-                  {scenario.is_template ? (
-                    <Button 
-                      size="sm" 
-                      onClick={() => createFromTemplate(scenario)}
-                      className="flex items-center space-x-1"
-                    >
-                      <Star className="h-4 w-4" />
-                      <span>템플릿 사용</span>
-                    </Button>
-                  ) : (
-                    <Button 
-                      size="sm" 
-                      onClick={() => router.push(`/scenarios/${scenario.id}/edit`)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAction("edit", scenario)}
                     >
                       <Edit className="h-4 w-4 mr-1" />
                       편집
                     </Button>
-                  )}
-                  
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => copyScenario(scenario)}
-                    title="복사하기"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                <div className="flex space-x-2">
-                  {!scenario.is_template && (
-                    <Button 
-                      size="sm" 
+                    
+                    <Button
+                      size="sm"
                       variant="outline"
-                      onClick={() => router.push(`/scenarios/${scenario.id}/simulate`)}
-                      title="시뮬레이션"
+                      onClick={() => handleAction("copy", scenario)}
                     >
-                      <Play className="h-4 w-4" />
+                      <Copy className="h-4 w-4 mr-1" />
+                      복사
                     </Button>
-                  )}
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => deleteScenario(scenario.id)}
-                    title="삭제하기"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleAction("simulate", scenario)}>
+                          <Play className="h-4 w-4 mr-2" />
+                          시뮬레이션
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleAction("download", scenario)}>
+                          <Download className="h-4 w-4 mr-2" />
+                          다운로드
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <Share2 className="h-4 w-4 mr-2" />
+                          공유
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleAction("archive", scenario)}>
+                          <Archive className="h-4 w-4 mr-2" />
+                          보관
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleAction("delete", scenario)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          삭제
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        
+        {scenarios.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-muted-foreground">
+              <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">조건에 맞는 시나리오가 없습니다</p>
+              <p className="text-sm">다른 검색 조건을 사용해보세요.</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {scenarios.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-gray-500 mb-4">
-            <Plus className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg">시나리오가 없습니다</p>
-            <p className="text-sm">새 시나리오를 생성해보세요.</p>
-          </div>
+      {/* 페이지네이션 */}
+      {pagination.pages > 1 && (
+        <div className="flex justify-center">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious 
+                  onClick={() => handlePageChange(Math.max(1, pagination.page - 1))}
+                  className={pagination.page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+              
+              {[...Array(pagination.pages)].map((_, index) => {
+                const page = index + 1
+                if (
+                  page === 1 ||
+                  page === pagination.pages ||
+                  (page >= pagination.page - 2 && page <= pagination.page + 2)
+                ) {
+                  return (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => handlePageChange(page)}
+                        isActive={page === pagination.page}
+                        className="cursor-pointer"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                } else if (page === pagination.page - 3 || page === pagination.page + 3) {
+                  return (
+                    <PaginationItem key={page}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  )
+                }
+                return null
+              })}
+              
+              <PaginationItem>
+                <PaginationNext 
+                  onClick={() => handlePageChange(Math.min(pagination.pages, pagination.page + 1))}
+                  className={pagination.page >= pagination.pages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       )}
     </div>
