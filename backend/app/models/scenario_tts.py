@@ -1,13 +1,14 @@
 # backend/app/models/scenario_tts.py
 import uuid
 from datetime import datetime
-from typing import Optional
-from sqlmodel import Field, SQLModel, Relationship
+from typing import Optional, Dict, Any
+from sqlmodel import Field, SQLModel, Relationship, Column
+from sqlalchemy import JSON
 
 # 시나리오와 TTS 연결 모델
 class ScenarioTTSBase(SQLModel):
     text_content: str
-    voice_settings: Optional[dict] = Field(default=None)  # 속도, 톤, 감정 설정
+    voice_settings: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 속도, 톤, 감정 설정
 
 class ScenarioTTSCreate(ScenarioTTSBase):
     scenario_id: uuid.UUID
@@ -17,7 +18,7 @@ class ScenarioTTSCreate(ScenarioTTSBase):
 class ScenarioTTSUpdate(ScenarioTTSBase):
     text_content: Optional[str] = None
     voice_actor_id: Optional[uuid.UUID] = None
-    voice_settings: Optional[dict] = None
+    voice_settings: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class ScenarioTTS(ScenarioTTSBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
