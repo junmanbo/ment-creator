@@ -16,9 +16,10 @@ from .scenario import (
     Scenario, ScenarioCreate, ScenarioUpdate, ScenarioPublic, ScenarioWithDetails,
     ScenarioNode, ScenarioNodeCreate, ScenarioNodeUpdate, ScenarioNodePublic,
     ScenarioConnection, ScenarioConnectionCreate, ScenarioConnectionUpdate, ScenarioConnectionPublic,
-    ScenarioVersion, ScenarioVersionCreate, ScenarioVersionPublic,
+    ScenarioVersion, ScenarioVersionCreate, ScenarioVersionUpdate, ScenarioVersionPublic,
     ScenarioSimulation, ScenarioSimulationCreate, ScenarioSimulationPublic,
-    ScenarioStatus, NodeType
+    ScenarioStatus, NodeType, VersionStatus, ChangeType,
+    VersionDiff, VersionRollbackRequest, VersionMergeRequest
 )
 
 __all__ = [
@@ -40,7 +41,8 @@ __all__ = [
     "Scenario", "ScenarioCreate", "ScenarioUpdate", "ScenarioPublic", "ScenarioWithDetails",
     "ScenarioNode", "ScenarioNodeCreate", "ScenarioNodeUpdate", "ScenarioNodePublic",
     "ScenarioConnection", "ScenarioConnectionCreate", "ScenarioConnectionUpdate", "ScenarioConnectionPublic",
-    "ScenarioVersion", "ScenarioVersionCreate", "ScenarioVersionPublic",
+    "ScenarioVersion", "ScenarioVersionCreate", "ScenarioVersionUpdate", "ScenarioVersionPublic",
     "ScenarioSimulation", "ScenarioSimulationCreate", "ScenarioSimulationPublic",
-    "ScenarioStatus", "NodeType",
+    "ScenarioStatus", "NodeType", "VersionStatus", "ChangeType",
+    "VersionDiff", "VersionRollbackRequest", "VersionMergeRequest",
 ]

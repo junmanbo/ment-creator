@@ -50,7 +50,12 @@ import {
   Maximize,
   RefreshCw,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  Clock,
+  TrendingUp
 } from "lucide-react"
 
 // 노드 타입 정의
@@ -168,11 +173,173 @@ function ScenarioEditPageContent() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [autoVersionEnabled, setAutoVersionEnabled] = useState(true)
+  const [lastVersionSnapshot, setLastVersionSnapshot] = useState<any>(null)
+  const [changeTracker, setChangeTracker] = useState<{
+    nodes_added: string[]
+    nodes_modified: string[]
+    nodes_deleted: string[]
+    connections_added: string[]
+    connections_modified: string[]
+    connections_deleted: string[]
+  }>({
+    nodes_added: [],
+    nodes_modified: [],
+    nodes_deleted: [],
+    connections_added: [],
+    connections_modified: [],
+    connections_deleted: []
+  })
 
-  // 변경사항 추적
+  // 변경사항 추적 및 자동 버전 생성
   useEffect(() => {
+    if (lastVersionSnapshot && (nodes.length > 0 || edges.length > 0)) {
+      trackChanges()
+    }
     setHasUnsavedChanges(true)
   }, [nodes, edges])
+
+  // 변경사항 분석 함수
+  const trackChanges = () => {
+    if (!lastVersionSnapshot) return
+
+    const currentSnapshot = {
+      nodes: nodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
+      connections: edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+    }
+
+    const prevNodes = new Map(lastVersionSnapshot.nodes?.map((n: any) => [n.id, n]) || [])
+    const prevConnections = new Map(lastVersionSnapshot.connections?.map((c: any) => [c.id, c]) || [])
+    const currentNodes = new Map(currentSnapshot.nodes.map(n => [n.id, n]))
+    const currentConnections = new Map(currentSnapshot.connections.map(c => [c.id, c]))
+
+    const tracker = {
+      nodes_added: [],
+      nodes_modified: [],
+      nodes_deleted: [],
+      connections_added: [],
+      connections_modified: [],
+      connections_deleted: []
+    } as any
+
+    // 노드 변경 추적
+    for (const [nodeId, node] of currentNodes) {
+      if (!prevNodes.has(nodeId)) {
+        tracker.nodes_added.push(nodeId)
+      } else if (JSON.stringify(prevNodes.get(nodeId)) !== JSON.stringify(node)) {
+        tracker.nodes_modified.push(nodeId)
+      }
+    }
+
+    for (const [nodeId] of prevNodes) {
+      if (!currentNodes.has(nodeId)) {
+        tracker.nodes_deleted.push(nodeId)
+      }
+    }
+
+    // 연결 변경 추적
+    for (const [connId, conn] of currentConnections) {
+      if (!prevConnections.has(connId)) {
+        tracker.connections_added.push(connId)
+      } else if (JSON.stringify(prevConnections.get(connId)) !== JSON.stringify(conn)) {
+        tracker.connections_modified.push(connId)
+      }
+    }
+
+    for (const [connId] of prevConnections) {
+      if (!currentConnections.has(connId)) {
+        tracker.connections_deleted.push(connId)
+      }
+    }
+
+    setChangeTracker(tracker)
+  }
+
+  // 자동 버전 생성
+  const createAutoVersion = async (changeDescription?: string) => {
+    if (!scenario || !autoVersionEnabled) return null
+
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      if (!accessToken) return null
+
+      const changes = getChangeDescription()
+      const description = changeDescription || changes || "자동 생성된 버전"
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/versions/auto?change_description=${encodeURIComponent(description)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const newVersion = await response.json()
+        
+        // 현재 상태를 새로운 기준점으로 설정
+        setLastVersionSnapshot({
+          nodes: nodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
+          connections: edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+        })
+        
+        // 변경 추적 초기화
+        setChangeTracker({
+          nodes_added: [],
+          nodes_modified: [],
+          nodes_deleted: [],
+          connections_added: [],
+          connections_modified: [],
+          connections_deleted: []
+        })
+
+        toast({
+          title: "자동 버전 생성",
+          description: `버전 ${newVersion.version}이 생성되었습니다.`,
+          duration: 3000,
+        })
+
+        return newVersion
+      }
+    } catch (error) {
+      console.error("Auto version creation error:", error)
+    }
+    return null
+  }
+
+  // 변경 사항 설명 생성
+  const getChangeDescription = () => {
+    const changes = []
+    
+    if (changeTracker.nodes_added.length > 0) {
+      changes.push(`노드 ${changeTracker.nodes_added.length}개 추가`)
+    }
+    if (changeTracker.nodes_modified.length > 0) {
+      changes.push(`노드 ${changeTracker.nodes_modified.length}개 수정`)
+    }
+    if (changeTracker.nodes_deleted.length > 0) {
+      changes.push(`노드 ${changeTracker.nodes_deleted.length}개 삭제`)
+    }
+    if (changeTracker.connections_added.length > 0) {
+      changes.push(`연결 ${changeTracker.connections_added.length}개 추가`)
+    }
+    if (changeTracker.connections_modified.length > 0) {
+      changes.push(`연결 ${changeTracker.connections_modified.length}개 수정`)
+    }
+    if (changeTracker.connections_deleted.length > 0) {
+      changes.push(`연결 ${changeTracker.connections_deleted.length}개 삭제`)
+    }
+
+    return changes.join(", ")
+  }
+
+  // 중요한 변경사항 감지 (자동 버전 생성 트리거)
+  const hasSignificantChanges = () => {
+    const totalChanges = Object.values(changeTracker).reduce((sum, arr) => sum + arr.length, 0)
+    return totalChanges >= 3 // 3개 이상 변경 시 중요한 변경으로 간주
+  }
 
   // 시나리오 로드
   useEffect(() => {
@@ -236,6 +403,12 @@ function ScenarioEditPageContent() {
         
         setNodes(flowNodes)
         setEdges(flowEdges)
+        
+        // 초기 스냅샷 설정 (버전 추적을 위한 기준점)
+        setLastVersionSnapshot({
+          nodes: flowNodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
+          connections: flowEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+        })
         
         // 노드 카운터 업데이트
         const maxNodeNum = Math.max(...flowNodes.map(n => {
@@ -487,8 +660,8 @@ function ScenarioEditPageContent() {
     setHasUnsavedChanges(true)
   }
 
-  // 시나리오 저장
-  const saveScenario = async () => {
+  // 시나리오 저장 (자동 버전 생성 포함)
+  const saveScenario = async (createVersion: boolean = false) => {
     if (!scenario) return
     
     setIsSaving(true)
@@ -506,6 +679,15 @@ function ScenarioEditPageContent() {
       
       const currentNodes = getNodes()
       const currentEdges = getEdges()
+      
+      // 중요한 변경 사항이 있고 자동 버전이 활성화된 경우 자동 버전 생성
+      let newVersion = null
+      if ((createVersion || (autoVersionEnabled && hasSignificantChanges())) && hasUnsavedChanges) {
+        const changeDesc = getChangeDescription()
+        if (changeDesc) {
+          newVersion = await createAutoVersion(changeDesc)
+        }
+      }
       
       // 1. 기존 노드 및 연결 삭제
       if (scenario.nodes && scenario.nodes.length > 0) {
@@ -580,9 +762,28 @@ function ScenarioEditPageContent() {
       setLastSaved(new Date())
       setHasUnsavedChanges(false)
       
+      // 새로운 스냅샷 설정
+      setLastVersionSnapshot({
+        nodes: currentNodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
+        connections: currentEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+      })
+      
+      // 변경 추적 초기화
+      setChangeTracker({
+        nodes_added: [],
+        nodes_modified: [],
+        nodes_deleted: [],
+        connections_added: [],
+        connections_modified: [],
+        connections_deleted: []
+      })
+      
       toast({
         title: "저장 완료",
-        description: "시나리오가 저장되었습니다.",
+        description: newVersion 
+          ? `시나리오가 저장되고 버전 ${newVersion.version}이 생성되었습니다.`
+          : "시나리오가 저장되었습니다.",
+        duration: newVersion ? 5000 : 3000
       })
       
       // 시나리오 데이터 다시 로드하여 최신 상태 유지
@@ -681,19 +882,65 @@ function ScenarioEditPageContent() {
                   저장됨
                 </Badge>
               )}
+              {hasSignificantChanges() && autoVersionEnabled && (
+                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  자동 버전 대상
+                </Badge>
+              )}
             </div>
-            <p className="text-sm text-gray-600">
-              버전 {scenario.version}
+            <div className="flex items-center space-x-4 text-sm text-gray-600">
+              <span>버전 {scenario.version}</span>
               {lastSaved && (
-                <span className="ml-2">
-                  • 마지막 저장: {lastSaved.toLocaleTimeString('ko-KR')}
+                <span className="flex items-center space-x-1">
+                  <Clock className="h-3 w-3" />
+                  <span>마지막 저장: {lastSaved.toLocaleTimeString('ko-KR')}</span>
                 </span>
               )}
-            </p>
+              {getChangeDescription() && (
+                <span className="flex items-center space-x-1 text-blue-600">
+                  <Eye className="h-3 w-3" />
+                  <span>{getChangeDescription()}</span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
         
         <div className="flex items-center space-x-2">
+          {/* 자동 버전 토글 */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAutoVersionEnabled(!autoVersionEnabled)}
+            className={`${autoVersionEnabled ? 'bg-blue-50 border-blue-300' : ''}`}
+            title={`자동 버전 생성 ${autoVersionEnabled ? '비활성화' : '활성화'}`}
+          >
+            {autoVersionEnabled ? (
+              <>
+                <ToggleRight className="h-4 w-4 mr-2 text-blue-600" />
+                자동 버전
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="h-4 w-4 mr-2 text-gray-400" />
+                자동 버전
+              </>
+            )}
+          </Button>
+          
+          {/* 수동 버전 생성 */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => createAutoVersion("수동 버전 생성")}
+            disabled={!hasUnsavedChanges}
+            title="현재 상태로 수동 버전 생성"
+          >
+            <GitBranch className="h-4 w-4 mr-2" />
+            버전 생성
+          </Button>
+          
           <Button 
             variant="outline" 
             onClick={() => loadScenario(scenario.id)}
@@ -723,18 +970,34 @@ function ScenarioEditPageContent() {
             <Play className="h-4 w-4 mr-2" />
             시뮬레이션
           </Button>
-          <Button 
-            onClick={saveScenario} 
-            disabled={isSaving || !hasUnsavedChanges}
-            variant={hasUnsavedChanges ? "default" : "outline"}
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
+          
+          {/* 저장 옵션 */}
+          <div className="flex space-x-1">
+            <Button 
+              onClick={() => saveScenario(false)} 
+              disabled={isSaving || !hasUnsavedChanges}
+              variant={hasUnsavedChanges ? "default" : "outline"}
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {isSaving ? "저장 중..." : "저장"}
+            </Button>
+            
+            {hasUnsavedChanges && (
+              <Button 
+                onClick={() => saveScenario(true)} 
+                disabled={isSaving}
+                variant="secondary"
+                size="sm"
+                title="저장과 동시에 버전 생성"
+              >
+                + 버전
+              </Button>
             )}
-            {isSaving ? "저장 중..." : "저장"}
-          </Button>
+          </div>
         </div>
       </div>
 
@@ -809,6 +1072,27 @@ function ScenarioEditPageContent() {
               <VersionManager
                 scenarioId={scenario.id}
                 currentVersion={scenario.version}
+                onVersionChange={(newVersion) => {
+                  // 버전 변경 시 시나리오 데이터 업데이트
+                  if (scenario) {
+                    setScenario({ ...scenario, version: newVersion })
+                  }
+                  // 새로운 스냅샷 설정
+                  setLastVersionSnapshot({
+                    nodes: nodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
+                    connections: edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+                  })
+                  // 변경 추적 초기화
+                  setChangeTracker({
+                    nodes_added: [],
+                    nodes_modified: [],
+                    nodes_deleted: [],
+                    connections_added: [],
+                    connections_modified: [],
+                    connections_deleted: []
+                  })
+                  setHasUnsavedChanges(false)
+                }}
               />
             </div>
           </div>
