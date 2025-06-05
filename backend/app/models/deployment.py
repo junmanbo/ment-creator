@@ -65,7 +65,7 @@ class DeploymentPublic(DeploymentBase):
 class DeploymentHistoryBase(SQLModel):
     action: str  # deploy, rollback, pause, resume
     description: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    deployment_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class DeploymentHistory(DeploymentHistoryBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
