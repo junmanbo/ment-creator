@@ -187,7 +187,6 @@ class ScenarioVersionBase(SQLModel):
     version_status: VersionStatus = VersionStatus.DRAFT
     notes: Optional[str] = None
     tag: Optional[str] = Field(default=None, max_length=50)  # 버전 태그 (예: v1.0-stable, hotfix-001)
-    parent_version_id: Optional[uuid.UUID] = Field(default=None)  # 부모 버전 (브랜치 지원)
     snapshot: Dict[str, Any] = Field(sa_column=Column(JSON))  # 전체 시나리오 스냅샷
     change_summary: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 변경 요약
     auto_generated: bool = Field(default=False)  # 자동 생성 여부
@@ -205,6 +204,7 @@ class ScenarioVersion(ScenarioVersionBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     scenario_id: uuid.UUID = Field(foreign_key="scenario.id")
     created_by: uuid.UUID = Field(foreign_key="user.id")
+    parent_version_id: Optional[uuid.UUID] = Field(default=None, foreign_key="scenarioversion.id")  # 부모 버전 (self-reference)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     
@@ -213,14 +213,19 @@ class ScenarioVersion(ScenarioVersionBase, table=True):
     created_by_user: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[ScenarioVersion.created_by]"}
     )
+    # Self-referential relationship: 부모 버전 참조
     parent_version: Optional["ScenarioVersion"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[ScenarioVersion.parent_version_id]", "remote_side": "[ScenarioVersion.id]"}
+        sa_relationship_kwargs={
+            "foreign_keys": "[ScenarioVersion.parent_version_id]",
+            "remote_side": "[ScenarioVersion.id]"
+        }
     )
 
 class ScenarioVersionPublic(ScenarioVersionBase):
     id: uuid.UUID
     scenario_id: uuid.UUID
     created_by: uuid.UUID
+    parent_version_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
 
