@@ -41,7 +41,7 @@ class ScenarioBase(SQLModel):
     version: str = Field(default="1.0", max_length=20)
     status: ScenarioStatus = ScenarioStatus.DRAFT
     is_template: bool = Field(default=False)
-    metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    scenario_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class ScenarioCreate(ScenarioBase):
     pass
@@ -124,7 +124,7 @@ class ScenarioNodeBase(SQLModel):
     name: str = Field(max_length=200)
     position_x: float = Field(default=0)
     position_y: float = Field(default=0)
-    config: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON))
+    config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class ScenarioNodeCreate(ScenarioNodeBase):
     scenario_id: uuid.UUID
