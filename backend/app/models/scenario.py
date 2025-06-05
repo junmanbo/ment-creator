@@ -41,7 +41,7 @@ class ScenarioBase(SQLModel):
     version: str = Field(default="1.0", max_length=20)
     status: ScenarioStatus = ScenarioStatus.DRAFT
     is_template: bool = Field(default=False)
-    scenario_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class ScenarioCreate(ScenarioBase):
     pass
