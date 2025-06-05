@@ -19,7 +19,7 @@ class TTSScriptBase(SQLModel):
     voice_settings: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 속도, 톤, 감정 설정
 
 class TTSScriptCreate(TTSScriptBase):
-    voice_actor_id: uuid.UUID
+    voice_actor_id: Optional[uuid.UUID] = None
 
 class TTSScriptUpdate(TTSScriptBase):
     text_content: Optional[str] = None
