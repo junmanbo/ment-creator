@@ -1,374 +1,359 @@
-# 🎯 손해보험 콜센터 ARS 시나리오 관리 시스템
+# 🎭 ARS 시나리오 관리 시스템
 
-## 📋 프로젝트 개요
+> 손해보험 콜센터 ARS 시나리오를 관리하고, Voice Cloning 기반 TTS 멘트를 생성하는 웹 애플리케이션
 
-손해보험사 콜센터의 ARS(자동응답시스템) 시나리오를 효율적으로 관리하고, **Voice Cloning 기술**을 활용한 고품질 TTS 멘트를 생성하는 통합 관리 시스템입니다.
+## 🌟 주요 기능
 
-### 🎨 주요 특징
+### ✅ 구현 완료된 기능
+- **사용자 인증**: JWT 기반 로그인/로그아웃 시스템
+- **성우 관리**: 성우 등록, 음성 샘플 업로드, 성우별 특성 관리
+- **TTS 생성**: Voice Cloning 기반 고품질 음성 생성
+- **음성 라이브러리**: 재사용 가능한 공통 멘트 관리
+- **멘트 관리**: 기본 멘트 CRUD 기능
+- **반응형 UI**: 모바일/태블릿/데스크톱 지원
 
-- 🎛️ **직관적인 플로우차트 에디터** - React Flow 기반 드래그 앤 드롭
-- 🎤 **Voice Cloning TTS** - 전문 성우 수준의 음성 생성
-- 📊 **버전 관리 시스템** - 변경 이력 추적 및 롤백
-- 🚀 **실시간 배포** - 테스트/운영 환경 배포 지원
-- 👥 **사용자 권한 관리** - 역할별 접근 제어
-- 📈 **모니터링 대시보드** - 성능 및 사용 통계
+### 🚧 진행 중인 기능
+- **시나리오 관리**: 플로우차트 기반 ARS 시나리오 편집기
+- **모니터링 대시보드**: TTS 생성 현황 및 시스템 성능 모니터링
+- **배포 관리**: 시나리오 배포 및 버전 관리
 
-## 🏗️ 시스템 아키텍처
+## 🛠️ 기술 스택
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │    Backend      │    │    Database     │
-│   (React)       │◄──►│   (FastAPI)     │◄──►│  (PostgreSQL)   │
-│                 │    │                 │    │                 │
-│ • React Flow    │    │ • SQLModel      │    │ • 시나리오 데이터│
-│ • Next.js       │    │ • JWT Auth      │    │ • 사용자 관리   │
-│ • TypeScript    │    │ • TTS API       │    │ • 음성 파일     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │   TTS Engine    │
-                    │  (Voice Clone)  │
-                    │                 │
-                    │ • Coqui XTTS    │
-                    │ • 성우 음성 모델│
-                    │ • 고품질 생성   │
-                    └─────────────────┘
-```
+### Backend
+- **Framework**: FastAPI (Python 3.11+)
+- **Database**: PostgreSQL 15+
+- **ORM**: SQLModel + SQLAlchemy
+- **Authentication**: JWT + OAuth2
+- **TTS Engine**: Coqui XTTS v2 (Voice Cloning)
+- **Background Tasks**: Celery + Redis
+
+### Frontend
+- **Framework**: Next.js 14 + React 18
+- **Language**: TypeScript
+- **UI Library**: Tailwind CSS + shadcn/ui
+- **State Management**: Redux Toolkit
+- **Icons**: Lucide React
+
+### Infrastructure
+- **Containerization**: Docker + Docker Compose
+- **Reverse Proxy**: Nginx
+- **File Storage**: MinIO (S3 Compatible)
 
 ## 🚀 빠른 시작
 
-### 1️⃣ 시스템 설정 및 실행
+### 1. 필수 요구사항
 
-```bash
-# 리포지토리 클론
+#### 시스템 요구사항
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL 15+
+- Redis 7+ (백그라운드 작업용)
+
+#### 선택사항 (권장)
+- NVIDIA GPU (TTS 성능 향상)
+- Docker (컨테이너 환경)
+
+### 2. 프로젝트 클론
+
+\`\`\`bash
 git clone <repository-url>
 cd ment-creator
+\`\`\`
 
-# 전체 시스템 설정 (자동)
-chmod +x setup_system.sh
-./setup_system.sh
+### 3. 데이터베이스 설정
 
-# 빠른 실행 (백엔드 + 프론트엔드 동시 실행)
-chmod +x run_system.sh
-./run_system.sh
-```
+#### PostgreSQL 설치 및 설정
+\`\`\`bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install postgresql postgresql-contrib
 
-### 2️⃣ 수동 실행 방법
+# macOS (Homebrew)
+brew install postgresql
+brew services start postgresql
 
-#### 백엔드 API 서버
-```bash
+# Docker 사용 (추천)
+docker run --name postgres \\
+  -e POSTGRES_PASSWORD=password \\
+  -e POSTGRES_DB=ment_creator \\
+  -p 5432:5432 \\
+  -d postgres:15
+\`\`\`
+
+#### Redis 설치 및 설정
+\`\`\`bash
+# Ubuntu/Debian
+sudo apt install redis-server
+
+# macOS (Homebrew)
+brew install redis
+brew services start redis
+
+# Docker 사용 (추천)
+docker run --name redis \\
+  -p 6379:6379 \\
+  -d redis:7
+\`\`\`
+
+### 4. 백엔드 설정
+
+\`\`\`bash
 cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
 
-#### 프론트엔드 개발 서버
-```bash
+# UV를 사용한 의존성 설치 (권장)
+uv venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\\Scripts\\activate  # Windows
+uv pip install -e .
+
+# 또는 pip 사용
+pip install -e .
+
+# 환경변수 설정 확인
+cp .env.example .env  # 필요시
+\`\`\`
+
+### 5. 프론트엔드 설정
+
+\`\`\`bash
 cd frontend/ment-gen
+
+# 의존성 설치
+npm install
+
+# 환경변수 설정 확인
+cp .env.example .env.local  # 필요시
+\`\`\`
+
+### 6. 애플리케이션 실행
+
+#### 🚀 원클릭 실행 (권장)
+\`\`\`bash
+chmod +x start_app.sh
+./start_app.sh
+\`\`\`
+
+#### 🔧 개별 실행
+\`\`\`bash
+# 터미널 1: 백엔드
+./start_backend.sh
+
+# 터미널 2: 프론트엔드  
+./start_frontend.sh
+\`\`\`
+
+### 7. 애플리케이션 접속
+
+- **프론트엔드**: http://localhost:3000
+- **백엔드 API**: http://localhost:8000
+- **API 문서**: http://localhost:8000/docs
+- **Redoc**: http://localhost:8000/redoc
+
+## 👨‍💻 개발 가이드
+
+### 백엔드 개발
+
+\`\`\`bash
+cd backend
+
+# 개발 서버 실행
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 데이터베이스 마이그레이션
+alembic revision --autogenerate -m "Add new model"
+alembic upgrade head
+
+# 테스트 실행
+pytest
+
+# 코드 포맷팅
+ruff format .
+ruff check . --fix
+\`\`\`
+
+### 프론트엔드 개발
+
+\`\`\`bash
+cd frontend/ment-gen
+
+# 개발 서버 실행
 npm run dev
-```
 
-### 3️⃣ 접속 주소
+# 빌드
+npm run build
 
-- 🌐 **웹 애플리케이션**: http://localhost:3000
-- 📚 **API 문서**: http://localhost:8000/docs
-- 🔧 **관리자 패널**: http://localhost:8000/admin
+# 타입 체크
+npm run type-check
 
-## 💻 기술 스택
+# 린팅
+npm run lint
+npm run lint:fix
+\`\`\`
 
-### Backend
-- **FastAPI** - 고성능 비동기 API 프레임워크
-- **SQLModel** - 타입 안전한 SQL ORM
-- **PostgreSQL** - 엔터프라이즈급 관계형 데이터베이스
-- **Alembic** - 데이터베이스 마이그레이션
-- **JWT** - 보안 인증 토큰
-- **Coqui TTS** - Voice Cloning 엔진
+## 🎯 사용법
 
-### Frontend
-- **React 18** - 사용자 인터페이스 라이브러리
-- **Next.js 14** - 풀스택 React 프레임워크
-- **TypeScript** - 타입 안전한 JavaScript
-- **React Flow** - 플로우차트 에디터
-- **Tailwind CSS** - 유틸리티 우선 CSS
-- **Redux Toolkit** - 상태 관리
+### 1. 초기 설정
 
-### DevOps
-- **Docker** - 컨테이너화
-- **tmux** - 터미널 멀티플렉서
-- **Git** - 버전 관리
+1. **관리자 계정 생성**
+   - 백엔드 초기 실행 시 자동으로 admin 계정이 생성됩니다
+   - 기본 계정: admin / admin (운영환경에서는 반드시 변경)
 
-## 📁 프로젝트 구조
+2. **성우 등록**
+   - 성우 관리 페이지에서 새 성우 등록
+   - 성우별 특성 정보 입력 (연령대, 성별, 음성 특징 등)
 
-```
-ment-creator/
-├── 📱 backend/                 # FastAPI 백엔드
-│   ├── app/
-│   │   ├── api/               # API 라우터
-│   │   ├── models/            # SQLModel 모델
-│   │   ├── services/          # 비즈니스 로직
-│   │   ├── core/              # 핵심 설정
-│   │   └── alembic/           # DB 마이그레이션
-│   ├── audio_files/           # 생성된 TTS 파일
-│   ├── voice_samples/         # 성우 음성 샘플
-│   └── tts_models/            # Voice Cloning 모델
-│
-├── ⚛️ frontend/               # React 프론트엔드
-│   └── ment-gen/
-│       ├── app/               # Next.js 13+ 앱 라우터
-│       ├── components/        # 재사용 컴포넌트
-│       └── public/            # 정적 자산
-│
-├── 🛠️ scripts/               # 실행 스크립트
-│   ├── setup_system.sh       # 전체 설정
-│   ├── run_system.sh         # 빠른 실행
-│   └── debug_system.sh       # 문제 해결
-│
-└── 📚 docs/                   # 문서
-    ├── api_specification.md   # API 명세서
-    ├── database_design.md     # 데이터베이스 설계
-    └── system_flowchart.md    # 시스템 흐름도
-```
+3. **음성 샘플 업로드**
+   - 각 성우별로 음성 샘플 파일 업로드
+   - Voice Cloning 품질 향상을 위해 다양한 샘플 권장
 
-## 🎮 핵심 기능
+### 2. TTS 생성
 
-### 🎛️ 시나리오 관리
-- **플로우차트 에디터**: 드래그 앤 드롭으로 ARS 플로우 설계
-- **노드 타입**: 시작, 메시지, 분기, 상담원 연결, 입력, 종료
-- **시뮬레이션**: 실제 배포 전 플로우 테스트
-- **버전 관리**: 변경 이력 추적 및 롤백
+1. **TTS 생성 페이지** 접속
+2. **텍스트 입력** 및 **성우 선택**
+3. **생성 옵션 설정** (속도, 감정 등)
+4. **TTS 생성** 버튼 클릭
+5. **생성 상태 확인** 및 **결과 다운로드**
 
-### 🎤 TTS 음성 생성
-- **성우 관리**: 다양한 성우 프로필 관리
-- **Voice Cloning**: 성우 음성 기반 TTS 생성
-- **품질 관리**: 생성된 음성의 품질 점수 평가
-- **라이브러리**: 재사용 가능한 공통 멘트 관리
+### 3. 음성 라이브러리 관리
 
-### 👥 사용자 관리
-- **역할 기반 접근 제어**: 관리자, 운영자, 뷰어
-- **JWT 인증**: 보안 토큰 기반 인증
-- **활동 로그**: 사용자 행동 추적
+1. **자주 사용하는 멘트**를 라이브러리에 등록
+2. **카테고리별 분류** 및 **태그 관리**
+3. **공개/비공개 설정**으로 팀 내 공유
+4. **원클릭 재사용**으로 빠른 TTS 생성
 
-### 🚀 배포 및 모니터링
-- **환경별 배포**: 개발, 스테이징, 프로덕션
-- **실시간 모니터링**: 시스템 성능 및 사용률
-- **알림 시스템**: 오류 및 중요 이벤트 알림
+## 🔧 고급 설정
 
-## 📊 API 엔드포인트
+### TTS 모델 설정
 
-### 🔐 인증
-- `POST /auth/login` - 사용자 로그인
-- `POST /auth/refresh` - 토큰 갱신
-- `POST /auth/logout` - 로그아웃
+\`\`\`bash
+# .env 파일에서 설정
+DEFAULT_TTS_MODEL=tts_models/multilingual/multi-dataset/xtts_v2
+USE_GPU=auto
+MAX_CONCURRENT_TTS_JOBS=3
+\`\`\`
 
-### 🎭 시나리오 관리
-- `GET /scenarios` - 시나리오 목록 조회
-- `POST /scenarios` - 새 시나리오 생성
-- `GET /scenarios/{id}` - 시나리오 상세 조회
-- `PUT /scenarios/{id}` - 시나리오 수정
-- `DELETE /scenarios/{id}` - 시나리오 삭제
+### 파일 업로드 제한
 
-### 🎤 TTS 관리
-- `GET /voice-actors` - 성우 목록 조회
-- `POST /voice-actors` - 새 성우 등록
-- `POST /voice-actors/{id}/samples` - 음성 샘플 업로드
-- `POST /tts-scripts/{id}/generate` - TTS 생성
+\`\`\`bash
+MAX_AUDIO_FILE_SIZE=50MB
+ALLOWED_AUDIO_FORMATS=wav,mp3,ogg,flac,m4a
+\`\`\`
 
-### 📊 모니터링
-- `GET /metrics/system` - 시스템 메트릭
-- `GET /metrics/tts` - TTS 생성 통계
-- `GET /alerts` - 알림 목록
+### GPU 사용 설정
 
-## 🔧 개발 가이드
+NVIDIA GPU가 있는 경우 TTS 생성 속도가 크게 향상됩니다:
+
+\`\`\`bash
+# CUDA 설치 확인
+nvidia-smi
+
+# PyTorch GPU 버전 설치
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu118
+\`\`\`
+
+## 📊 모니터링
+
+### 시스템 상태 확인
+
+- **대시보드**: http://localhost:3000/dashboard
+- **TTS 생성 현황**: 실시간 생성 상태 및 큐 상태
+- **성능 메트릭**: CPU, 메모리, 디스크 사용량
+- **오류 로그**: 시스템 오류 및 알림
+
+### API 모니터링
+
+- **API 문서**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
+- **메트릭**: http://localhost:8000/metrics
+
+## 🐳 Docker 배포
+
+### Docker Compose 사용
+
+\`\`\`bash
+# 전체 스택 실행
+docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f
+
+# 중지
+docker-compose down
+\`\`\`
+
+### 개별 컨테이너 빌드
+
+\`\`\`bash
+# 백엔드
+cd backend
+docker build -t ment-creator-backend .
+
+# 프론트엔드
+cd frontend/ment-gen
+docker build -t ment-creator-frontend .
+\`\`\`
+
+## 🔒 보안 설정
+
+### 운영환경 설정
+
+1. **JWT Secret Key 변경**
+\`\`\`bash
+# backend/.env
+SECRET_KEY=your-super-secure-secret-key
+\`\`\`
+
+2. **CORS 설정**
+\`\`\`bash
+ALLOWED_ORIGINS=https://yourdomain.com
+\`\`\`
+
+3. **데이터베이스 보안**
+\`\`\`bash
+DATABASE_URL=postgresql://user:password@localhost:5432/ment_creator
+\`\`\`
+
+## 🤝 기여하기
 
 ### 개발 환경 설정
 
-1. **Python 가상환경 생성**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 또는
-venv\\Scripts\\activate  # Windows
-```
+1. **Fork** 및 **Clone**
+2. **Feature 브랜치** 생성
+3. **개발** 및 **테스트**
+4. **Pull Request** 생성
 
-2. **의존성 설치**
-```bash
-# uv 사용 (권장)
-uv install
+### 코딩 스타일
 
-# 또는 pip 사용
-pip install -r requirements.txt
-```
+- **Backend**: Black + Ruff
+- **Frontend**: Prettier + ESLint
+- **Commit**: Conventional Commits
 
-3. **환경 변수 설정**
-```bash
-cp .env.example .env
-# .env 파일을 수정하여 실제 값으로 변경
-```
+## 📝 라이선스
 
-4. **데이터베이스 마이그레이션**
-```bash
-alembic upgrade head
-python app/initial_data.py
-```
+MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
 
-### 새 기능 개발
+## 🆘 문제 해결
 
-1. **백엔드 모델 추가**
-```python
-# app/models/new_model.py
-class NewModel(SQLModel, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    name: str
-    created_at: datetime = Field(default_factory=datetime.now)
-```
+### 자주 발생하는 문제
 
-2. **API 라우터 추가**
-```python
-# app/api/routes/new_routes.py
-@router.get("/", response_model=List[NewModel])
-def get_items(session: SessionDep, current_user: CurrentUser):
-    # 구현 로직
-    pass
-```
+1. **PostgreSQL 연결 오류**
+   - PostgreSQL 서비스 실행 상태 확인
+   - 데이터베이스 연결 정보 확인
 
-3. **프론트엔드 페이지 추가**
-```tsx
-// app/new-feature/page.tsx
-export default function NewFeaturePage() {
-  // React 컴포넌트 구현
-}
-```
+2. **TTS 생성 실패**
+   - GPU 메모리 부족: 배치 크기 줄이기
+   - 모델 다운로드 실패: 인터넷 연결 확인
 
-### 데이터베이스 마이그레이션
+3. **프론트엔드 빌드 오류**
+   - Node.js 버전 확인 (18+ 필요)
+   - 의존성 재설치: \`rm -rf node_modules && npm install\`
 
-```bash
-# 새 마이그레이션 생성
-alembic revision --autogenerate -m "Add new feature"
+### 지원
 
-# 마이그레이션 적용
-alembic upgrade head
-
-# 롤백
-alembic downgrade -1
-```
-
-## 🛠️ 문제 해결
-
-### 일반적인 문제들
-
-#### 1. 데이터베이스 연결 오류
-```bash
-# PostgreSQL 상태 확인
-systemctl status postgresql
-
-# 데이터베이스 재시작
-sudo systemctl restart postgresql
-
-# 연결 테스트
-psql $DATABASE_URL -c "SELECT 1;"
-```
-
-#### 2. TTS 생성 실패
-```bash
-# TTS 모델 캐시 초기화
-rm -rf backend/tts_models/*
-
-# 의존성 재설치
-pip install --force-reinstall TTS torch torchaudio
-```
-
-#### 3. 프론트엔드 빌드 오류
-```bash
-# Node.js 캐시 정리
-cd frontend/ment-gen
-rm -rf .next node_modules
-npm install
-```
-
-### 자동 진단 도구
-
-```bash
-# 시스템 전체 진단
-./debug_system.sh
-
-# 특정 문제 해결
-./debug_system.sh --fix-database
-./debug_system.sh --clear-cache
-./debug_system.sh --reinstall-deps
-```
-
-## 📈 성능 최적화
-
-### 백엔드 최적화
-- **데이터베이스 인덱스**: 자주 조회되는 컬럼에 인덱스 적용
-- **커넥션 풀링**: SQLAlchemy 연결 풀 설정
-- **캐싱**: Redis를 활용한 API 응답 캐싱
-- **비동기 처리**: 긴 작업의 백그라운드 처리
-
-### 프론트엔드 최적화
-- **코드 분할**: Next.js 동적 임포트 활용
-- **이미지 최적화**: Next.js Image 컴포넌트 사용
-- **상태 관리**: 불필요한 리렌더링 방지
-- **번들 분석**: webpack-bundle-analyzer 활용
-
-## 🔒 보안 고려사항
-
-### 인증 및 권한
-- **JWT 토큰**: 안전한 시크릿 키 사용
-- **CORS**: 허용된 오리진만 API 접근
-- **Rate Limiting**: API 요청 제한
-- **HTTPS**: 프로덕션 환경에서 SSL/TLS 적용
-
-### 데이터 보안
-- **민감 정보 암호화**: 데이터베이스 레벨 암호화
-- **접근 로그**: 모든 API 접근 기록
-- **데이터 백업**: 정기적 백업 및 복구 테스트
-
-## 📚 추가 문서
-
-- [📋 API 명세서](./docs/api_specification.md)
-- [🗄️ 데이터베이스 설계](./docs/database_design.md)
-- [🔄 시스템 흐름도](./docs/system_flowchart.md)
-- [🎯 프로젝트 명세서](./docs/project_specification.md)
-
-## 👥 기여하기
-
-1. **Fork** 이 리포지토리
-2. **Feature branch** 생성 (`git checkout -b feature/AmazingFeature`)
-3. **Commit** 변경사항 (`git commit -m 'Add some AmazingFeature'`)
-4. **Push** to the branch (`git push origin feature/AmazingFeature`)
-5. **Pull Request** 생성
-
-## 📄 라이선스
-
-이 프로젝트는 MIT 라이선스하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🙋‍♂️ 지원
-
-문제가 발생하거나 질문이 있으시면:
-
-1. **GitHub Issues**: 버그 리포트 및 기능 요청
-2. **Wiki**: 자세한 사용법 및 FAQ
-3. **Discord**: 실시간 커뮤니티 지원
+- **이슈 리포트**: GitHub Issues
+- **기능 요청**: GitHub Discussions
+- **문서**: 프로젝트 Wiki
 
 ---
 
-## 🎉 프로젝트 현황
-
-```
-✅ 사용자 인증 및 관리 (100%)
-✅ 시나리오 CRUD 기능 (100%)
-✅ React Flow 플로우차트 에디터 (100%)
-✅ 노드 편집 및 TTS 연동 (100%)
-✅ 성우 관리 시스템 (90%)
-✅ 상태 관리 및 배포 (90%)
-✅ 버전 관리 시스템 (90%)
-🚧 시뮬레이션 기능 (70%)
-🚧 모니터링 대시보드 (60%)
-📋 문서화 (80%)
-```
-
-**전체 완성도: 약 90%** 🎯
-
-이 시스템으로 손해보험사의 ARS 관리 효율성을 크게 향상시킬 수 있습니다! 🚀
+**Made with ❤️ by the ARS Management Team**
