@@ -30,6 +30,7 @@ import NodeEditor from "../../components/NodeEditor"
 import VersionManager from "../../components/VersionManager"
 import ScenarioStatusManager from "../../components/ScenarioStatusManager"
 import ScenarioTTSStatus from "../../components/ScenarioTTSStatus"
+import DeploymentManager from "../../components/DeploymentManager"
 import ImportExportManager from "../../../components/ImportExportManager"
 import CollaborationManager from "../../../components/CollaborationManager"
 import { 
@@ -792,19 +793,22 @@ function ScenarioEditPageContent() {
               />
             </div>
             
-            {/* 상태 관리 */}
+            {/* 배포 관리 */}
             <div className="p-4 border-t">
-              <ScenarioStatusManager
-                scenario={scenario}
-                onStatusChange={(newStatus) => {
-                  if (scenario) {
-                    setScenario({
-                      ...scenario,
-                      status: newStatus
-                    })
-                    setHasUnsavedChanges(true)
-                  }
+              <DeploymentManager
+                scenarioId={scenario.id}
+                currentVersion={scenario.version}
+                onDeploymentUpdate={(deployments) => {
+                  // 배포 상태 업데이트 시 필요한 처리
                 }}
+              />
+            </div>
+            
+            {/* 버전 관리 */}
+            <div className="p-4 border-t">
+              <VersionManager
+                scenarioId={scenario.id}
+                currentVersion={scenario.version}
               />
             </div>
           </div>
