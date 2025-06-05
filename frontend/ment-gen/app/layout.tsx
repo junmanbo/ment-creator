@@ -3,6 +3,7 @@ import "./globals.css"
 import { Inter } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster"
 import { Providers } from "./components/providers"
+import { MainLayout } from "@/components/layout"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,9 +21,9 @@ export default function RootLayout({
     <html lang="ko">
       <body className={inter.className}>
         <Providers>
-          <div className="min-h-screen">
-            <main className="w-full h-full">{children}</main>
-          </div>
+          <MainLayout>
+            {children}
+          </MainLayout>
           <Toaster />
         </Providers>
       </body>
