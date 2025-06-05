@@ -340,6 +340,63 @@ class TTSService:
                     
                     logger.info(f"ScenarioTTS {scenario_tts_id} updated with audio file")
     
+    async def batch_generate_tts(
+        self,
+        script_ids: List[uuid.UUID],
+        force_regenerate: bool = False
+    ) -> dict:
+        """여러 TTS 스크립트를 한 번에 생성"""
+        with Session(engine) as session:
+            results = {
+                "total_scripts": len(script_ids),
+                "generated": 0,
+                "skipped": 0,
+                "failed": 0,
+                "generation_ids": []
+            }
+            
+            for script_id in script_ids:
+                try:
+                    script = session.get(TTSScript, script_id)
+                    if not script:
+                        results["failed"] += 1
+                        continue
+                    
+                    # 기존 생성 확인
+                    existing_generation = session.exec(
+                        select(TTSGeneration).where(
+                            TTSGeneration.script_id == script_id,
+                            TTSGeneration.status == GenerationStatus.COMPLETED
+                        )
+                    ).first()
+                    
+                    if existing_generation and not force_regenerate:
+                        results["skipped"] += 1
+                        continue
+                    
+                    # 새 생성 작업 생성
+                    generation = TTSGeneration(
+                        script_id=script_id,
+                        requested_by=script.created_by,
+                        generation_params={"batch_mode": True}
+                    )
+                    
+                    session.add(generation)
+                    session.commit()
+                    session.refresh(generation)
+                    
+                    results["generation_ids"].append(str(generation.id))
+                    results["generated"] += 1
+                    
+                    # 백그라운드에서 처리 (실제로는 큐에 추가)
+                    asyncio.create_task(self.process_tts_generation(generation.id))
+                    
+                except Exception as e:
+                    logger.error(f"Failed to create batch TTS for script {script_id}: {e}")
+                    results["failed"] += 1
+            
+            return results
+    
     async def batch_generate_scenario_tts(
         self, 
         scenario_id: uuid.UUID, 

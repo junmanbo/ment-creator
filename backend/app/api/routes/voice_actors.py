@@ -1,6 +1,10 @@
 import uuid
+import logging
 from typing import List, Optional
 from pathlib import Path
+from sqlmodel import SQLModel
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -16,7 +20,8 @@ from app.models.voice_actor import (
 from app.models.tts import (
     TTSScript, TTSScriptCreate, TTSScriptPublic, 
     TTSGeneration, TTSGenerateRequest, TTSGenerationPublic,
-    TTSLibrary, TTSLibraryCreate, TTSLibraryUpdate, TTSLibraryPublic
+    TTSLibrary, TTSLibraryCreate, TTSLibraryUpdate, TTSLibraryPublic,
+    GenerationStatus
 )
 from app.services.tts_service import tts_service
 
@@ -333,6 +338,88 @@ async def cancel_tts_generation(
         return {"message": "TTS 생성이 취소되었습니다."}
     else:
         raise HTTPException(status_code=400, detail="취소할 수 없는 상태입니다.")
+
+# === 배치 TTS 생성 ===
+
+class BatchTTSRequest(SQLModel):
+    script_ids: List[uuid.UUID]
+    force_regenerate: bool = False
+
+@router.post("/tts-scripts/batch-generate")
+async def batch_generate_tts(
+    *,
+    session: SessionDep,
+    batch_request: BatchTTSRequest,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks
+):
+    """여러 TTS 스크립트를 한 번에 생성"""
+    if not batch_request.script_ids:
+        raise HTTPException(status_code=400, detail="스크립트 ID가 없습니다.")
+    
+    if len(batch_request.script_ids) > 20:  # 최대 20개로 제한
+        raise HTTPException(status_code=400, detail="한 번에 최대 20개의 스크립트만 처리할 수 있습니다.")
+    
+    # 스크립트 소유권 확인
+    for script_id in batch_request.script_ids:
+        script = session.get(TTSScript, script_id)
+        if not script:
+            raise HTTPException(status_code=404, detail=f"스크립트 {script_id}를 찾을 수 없습니다.")
+        if script.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail=f"스크립트 {script_id}에 대한 권한이 없습니다.")
+    
+    # 배치 생성 시작
+    try:
+        results = await tts_service.batch_generate_tts(
+            batch_request.script_ids,
+            batch_request.force_regenerate
+        )
+        
+        return {
+            "message": "배치 TTS 생성이 시작되었습니다.",
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Batch TTS generation failed: {e}")
+        raise HTTPException(status_code=500, detail="배치 생성 중 오류가 발생했습니다.")
+
+@router.get("/tts-generations/batch-status")
+def get_batch_generation_status(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    generation_ids: str = None  # 쉽표로 구분된 생성 ID 목록
+):
+    """배치 TTS 생성 상태 조회"""
+    if not generation_ids:
+        raise HTTPException(status_code=400, detail="생성 ID가 필요합니다.")
+    
+    try:
+        id_list = [uuid.UUID(id.strip()) for id in generation_ids.split(",")]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="잘못된 ID 형식입니다.")
+    
+    generations = []
+    for gen_id in id_list:
+        generation = session.get(TTSGeneration, gen_id)
+        if generation and generation.requested_by == current_user.id:
+            generations.append(generation)
+    
+    # 상태 요약
+    status_summary = {
+        "total": len(generations),
+        "pending": len([g for g in generations if g.status == GenerationStatus.PENDING]),
+        "processing": len([g for g in generations if g.status == GenerationStatus.PROCESSING]),
+        "completed": len([g for g in generations if g.status == GenerationStatus.COMPLETED]),
+        "failed": len([g for g in generations if g.status == GenerationStatus.FAILED]),
+        "cancelled": len([g for g in generations if g.status == GenerationStatus.CANCELLED])
+    }
+    
+    return {
+        "generations": [TTSGenerationPublic.model_validate(g) for g in generations],
+        "summary": status_summary
+    }
 
 # === TTS 라이브러리 관리 ===
 
