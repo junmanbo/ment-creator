@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
-from sqlmodel import Field, SQLModel, Relationship
+from typing import Optional, List, Dict, Any
+from sqlmodel import Field, SQLModel, Relationship, Column
+from sqlalchemy import JSON
 from enum import Enum
 
 class DeploymentEnvironment(str, Enum):
@@ -20,7 +21,7 @@ class DeploymentStatus(str, Enum):
 class DeploymentBase(SQLModel):
     environment: DeploymentEnvironment
     version: str
-    config: Optional[dict] = Field(default=None)
+    config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     rollback_version: Optional[str] = None
 
 class DeploymentCreate(DeploymentBase):
@@ -30,7 +31,7 @@ class DeploymentUpdate(SQLModel):
     environment: Optional[DeploymentEnvironment] = None
     version: Optional[str] = None
     status: Optional[DeploymentStatus] = None
-    config: Optional[dict] = None
+    config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     rollback_version: Optional[str] = None
     error_message: Optional[str] = None
 
@@ -64,7 +65,7 @@ class DeploymentPublic(DeploymentBase):
 class DeploymentHistoryBase(SQLModel):
     action: str  # deploy, rollback, pause, resume
     description: Optional[str] = None
-    metadata: Optional[dict] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class DeploymentHistory(DeploymentHistoryBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
