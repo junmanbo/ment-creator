@@ -15,7 +15,8 @@ from app.models.voice_actor import (
 )
 from app.models.tts import (
     TTSScript, TTSScriptCreate, TTSScriptPublic, 
-    TTSGeneration, TTSGenerateRequest, TTSGenerationPublic
+    TTSGeneration, TTSGenerateRequest, TTSGenerationPublic,
+    TTSLibrary, TTSLibraryCreate, TTSLibraryUpdate, TTSLibraryPublic
 )
 from app.services.tts_service import tts_service
 
@@ -332,3 +333,202 @@ async def cancel_tts_generation(
         return {"message": "TTS 생성이 취소되었습니다."}
     else:
         raise HTTPException(status_code=400, detail="취소할 수 없는 상태입니다.")
+
+# === TTS 라이브러리 관리 ===
+
+@router.post("/tts-library", response_model=TTSLibraryPublic)
+def create_tts_library(
+    *,
+    session: SessionDep,
+    library_in: TTSLibraryCreate,
+    current_user: CurrentUser
+) -> TTSLibrary:
+    """TTS 라이브러리 아이템 생성"""
+    # 성우 존재 확인
+    if library_in.voice_actor_id:
+        voice_actor = session.get(VoiceActor, library_in.voice_actor_id)
+        if not voice_actor:
+            raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
+    
+    library_item = TTSLibrary(
+        **library_in.model_dump(),
+        created_by=current_user.id
+    )
+    session.add(library_item)
+    session.commit()
+    session.refresh(library_item)
+    return library_item
+
+@router.get("/tts-library", response_model=List[TTSLibraryPublic])
+def get_tts_library(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 50,
+    category: Optional[str] = None,
+    is_public: Optional[bool] = None,
+    search: Optional[str] = None
+) -> List[TTSLibrary]:
+    """TTS 라이브러리 목록 조회"""
+    statement = select(TTSLibrary)
+    
+    # 필터 적용
+    if category:
+        statement = statement.where(TTSLibrary.category == category)
+    if is_public is not None:
+        statement = statement.where(TTSLibrary.is_public == is_public)
+    if search:
+        search_term = f"%{search}%"
+        statement = statement.where(
+            (TTSLibrary.name.ilike(search_term)) |
+            (TTSLibrary.text_content.ilike(search_term)) |
+            (TTSLibrary.tags.ilike(search_term))
+        )
+    
+    # 공개 아이템 또는 본인이 생성한 아이템만 조회
+    statement = statement.where(
+        (TTSLibrary.is_public == True) |
+        (TTSLibrary.created_by == current_user.id)
+    )
+    
+    statement = statement.offset(skip).limit(limit).order_by(TTSLibrary.usage_count.desc())
+    library_items = session.exec(statement).all()
+    return library_items
+
+@router.get("/tts-library/{library_id}", response_model=TTSLibraryPublic)
+def get_tts_library_item(
+    *,
+    session: SessionDep,
+    library_id: uuid.UUID,
+    current_user: CurrentUser
+) -> TTSLibrary:
+    """TTS 라이브러리 아이템 조회"""
+    library_item = session.get(TTSLibrary, library_id)
+    if not library_item:
+        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
+    
+    # 접근 권한 확인 (공개 아이템 또는 본인이 생성한 아이템)
+    if not library_item.is_public and library_item.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+    
+    return library_item
+
+@router.put("/tts-library/{library_id}", response_model=TTSLibraryPublic)
+def update_tts_library_item(
+    *,
+    session: SessionDep,
+    library_id: uuid.UUID,
+    library_in: TTSLibraryUpdate,
+    current_user: CurrentUser
+) -> TTSLibrary:
+    """TTS 라이브러리 아이템 수정"""
+    library_item = session.get(TTSLibrary, library_id)
+    if not library_item:
+        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
+    
+    # 수정 권한 확인 (본인이 생성한 아이템만)
+    if library_item.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
+    
+    update_data = library_in.model_dump(exclude_unset=True)
+    library_item.sqlmodel_update(update_data)
+    
+    session.add(library_item)
+    session.commit()
+    session.refresh(library_item)
+    return library_item
+
+@router.delete("/tts-library/{library_id}")
+def delete_tts_library_item(
+    *,
+    session: SessionDep,
+    library_id: uuid.UUID,
+    current_user: CurrentUser
+):
+    """TTS 라이브러리 아이템 삭제"""
+    library_item = session.get(TTSLibrary, library_id)
+    if not library_item:
+        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
+    
+    # 삭제 권한 확인 (본인이 생성한 아이템만)
+    if library_item.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
+    
+    session.delete(library_item)
+    session.commit()
+    
+    return {"message": "라이브러리 아이템이 삭제되었습니다."}
+
+@router.post("/tts-library/{library_id}/use")
+def use_tts_library_item(
+    *,
+    session: SessionDep,
+    library_id: uuid.UUID,
+    current_user: CurrentUser
+):
+    """TTS 라이브러리 아이템 사용 (사용 횟수 증가)"""
+    library_item = session.get(TTSLibrary, library_id)
+    if not library_item:
+        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
+    
+    # 접근 권한 확인
+    if not library_item.is_public and library_item.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+    
+    # 사용 횟수 증가
+    library_item.usage_count += 1
+    session.add(library_item)
+    session.commit()
+    
+    return {"message": "사용 횟수가 증가되었습니다.", "usage_count": library_item.usage_count}
+
+@router.get("/tts-library/{library_id}/audio")
+def stream_library_audio(
+    *,
+    session: SessionDep,
+    library_id: uuid.UUID,
+    current_user: CurrentUser
+) -> StreamingResponse:
+    """TTS 라이브러리 오디오 스트리밍"""
+    library_item = session.get(TTSLibrary, library_id)
+    if not library_item:
+        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
+    
+    # 접근 권한 확인
+    if not library_item.is_public and library_item.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+    
+    if not library_item.audio_file_path:
+        raise HTTPException(status_code=404, detail="오디오 파일이 없습니다.")
+    
+    file_path = Path(library_item.audio_file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="오디오 파일을 찾을 수 없습니다.")
+    
+    def iterfile():
+        with open(file_path, "rb") as file:
+            while chunk := file.read(1024):
+                yield chunk
+    
+    return StreamingResponse(iterfile(), media_type="audio/wav")
+
+@router.get("/tts-library/categories", response_model=List[str])
+def get_tts_library_categories(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser
+) -> List[str]:
+    """TTS 라이브러리 카테고리 목록 조회"""
+    statement = select(TTSLibrary.category).distinct().where(
+        TTSLibrary.category.isnot(None)
+    )
+    
+    # 공개 아이템 또는 본인이 생성한 아이템만
+    statement = statement.where(
+        (TTSLibrary.is_public == True) |
+        (TTSLibrary.created_by == current_user.id)
+    )
+    
+    categories = session.exec(statement).all()
+    return [cat for cat in categories if cat]  # None 값 제거
