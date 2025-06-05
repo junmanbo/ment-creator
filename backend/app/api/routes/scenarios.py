@@ -10,10 +10,12 @@ from app.models.scenario import (
     Scenario, ScenarioCreate, ScenarioUpdate, ScenarioPublic, ScenarioWithDetails,
     ScenarioNode, ScenarioNodeCreate, ScenarioNodeUpdate, ScenarioNodePublic,
     ScenarioConnection, ScenarioConnectionCreate, ScenarioConnectionUpdate, ScenarioConnectionPublic,
-    ScenarioVersion, ScenarioVersionCreate, ScenarioVersionPublic,
+    ScenarioVersion, ScenarioVersionCreate, ScenarioVersionUpdate, ScenarioVersionPublic,
     ScenarioSimulation, ScenarioSimulationCreate, ScenarioSimulationPublic,
-    ScenarioStatus, NodeType
+    ScenarioStatus, NodeType, VersionDiff, VersionRollbackRequest, VersionMergeRequest,
+    VersionStatus
 )
+from app.services.scenario_version_service import ScenarioVersionService
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -340,7 +342,7 @@ def delete_scenario_connection(
     
     return {"message": "연결이 삭제되었습니다."}
 
-# === 시나리오 버전 관리 ===
+# === 시나리오 버전 관리 (강화) ===
 
 @router.post("/{scenario_id}/versions", response_model=ScenarioVersionPublic)
 def create_scenario_version(
@@ -350,47 +352,249 @@ def create_scenario_version(
     version_in: ScenarioVersionCreate,
     current_user: CurrentUser
 ) -> ScenarioVersion:
-    """새 버전 생성"""
-    # 시나리오 존재 확인
-    scenario = session.get(Scenario, scenario_id)
-    if not scenario:
-        raise HTTPException(status_code=404, detail="시나리오를 찾을 수 없습니다.")
+    """수동 버전 생성 (릴리즈, 태그 등)"""
+    version_service = ScenarioVersionService(session)
     
-    # 현재 시나리오 상태를 스냅샷으로 저장
-    nodes = session.exec(select(ScenarioNode).where(ScenarioNode.scenario_id == scenario_id)).all()
-    connections = session.exec(select(ScenarioConnection).where(ScenarioConnection.scenario_id == scenario_id)).all()
-    
-    snapshot = {
-        "scenario": scenario.model_dump(),
-        "nodes": [node.model_dump() for node in nodes],
-        "connections": [conn.model_dump() for conn in connections]
-    }
-    
-    version_data = version_in.model_dump()
-    version_data["snapshot"] = snapshot
-    version_data["created_by"] = current_user.id
-    
-    version = ScenarioVersion(**version_data)
-    session.add(version)
-    session.commit()
-    session.refresh(version)
-    return version
+    if version_in.auto_create:
+        # 자동 버전 생성
+        return version_service.auto_create_version(
+            scenario_id, 
+            current_user.id, 
+            version_in.notes
+        )
+    else:
+        # 수동 버전 생성
+        return version_service.create_manual_version(
+            scenario_id,
+            current_user.id,
+            version_in
+        )
+
+@router.post("/{scenario_id}/versions/auto", response_model=ScenarioVersionPublic)
+def auto_create_version(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    current_user: CurrentUser,
+    change_description: Optional[str] = None
+) -> ScenarioVersion:
+    """자동 버전 생성 (시나리오 변경 시 호출)"""
+    version_service = ScenarioVersionService(session)
+    return version_service.auto_create_version(
+        scenario_id, 
+        current_user.id, 
+        change_description
+    )
 
 @router.get("/{scenario_id}/versions", response_model=List[ScenarioVersionPublic])
 def get_scenario_versions(
     *,
     session: SessionDep,
     scenario_id: uuid.UUID,
-    current_user: CurrentUser
+    current_user: CurrentUser,
+    include_auto: bool = Query(default=True, description="자동 생성 버전 포함 여부"),
+    status: Optional[VersionStatus] = Query(default=None, description="버전 상태 필터")
 ) -> List[ScenarioVersion]:
-    """버전 목록 조회"""
-    statement = select(ScenarioVersion).where(
-        ScenarioVersion.scenario_id == scenario_id
-    ).order_by(ScenarioVersion.created_at.desc())
-    versions = session.exec(statement).all()
+    """버전 목록 조회 (필터 옵션 포함)"""
+    version_service = ScenarioVersionService(session)
+    versions = version_service.get_version_history(scenario_id, include_auto)
+    
+    # 상태 필터 적용
+    if status:
+        versions = [v for v in versions if v.version_status == status]
+    
     return versions
 
+@router.put("/{scenario_id}/versions/{version_id}", response_model=ScenarioVersionPublic)
+def update_scenario_version(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    version_id: uuid.UUID,
+    version_update: ScenarioVersionUpdate,
+    current_user: CurrentUser
+) -> ScenarioVersion:
+    """버전 정보 수정 (상태, 태그, 노트 등)"""
+    version = session.get(ScenarioVersion, version_id)
+    if not version or version.scenario_id != scenario_id:
+        raise HTTPException(status_code=404, detail="버전을 찾을 수 없습니다.")
+    
+    update_data = version_update.model_dump(exclude_unset=True)
+    if update_data:
+        update_data["updated_at"] = datetime.now()
+        version.sqlmodel_update(update_data)
+    
+    session.add(version)
+    session.commit()
+    session.refresh(version)
+    return version
+
+@router.get("/{scenario_id}/versions/{version_from_id}/compare/{version_to_id}", response_model=VersionDiff)
+def compare_versions(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    version_from_id: uuid.UUID,
+    version_to_id: uuid.UUID,
+    current_user: CurrentUser
+) -> VersionDiff:
+    """두 버전 간 차이점 비교"""
+    version_service = ScenarioVersionService(session)
+    return version_service.compare_versions(version_from_id, version_to_id)
+
+@router.post("/{scenario_id}/versions/rollback", response_model=ScenarioVersionPublic)
+def rollback_to_version(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    rollback_request: VersionRollbackRequest,
+    current_user: CurrentUser
+) -> ScenarioVersion:
+    """특정 버전으로 롤백"""
+    version_service = ScenarioVersionService(session)
+    return version_service.rollback_to_version(
+        scenario_id,
+        rollback_request,
+        current_user.id
+    )
+
+@router.get("/{scenario_id}/versions/{version_id}/preview", response_model=ScenarioWithDetails)
+def preview_version(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: CurrentUser
+) -> ScenarioWithDetails:
+    """특정 버전의 시나리오 미리보기"""
+    version = session.get(ScenarioVersion, version_id)
+    if not version or version.scenario_id != scenario_id:
+        raise HTTPException(status_code=404, detail="버전을 찾을 수 없습니다.")
+    
+    snapshot = version.snapshot
+    scenario_data = snapshot.get('scenario', {})
+    nodes_data = snapshot.get('nodes', [])
+    connections_data = snapshot.get('connections', [])
+    
+    return ScenarioWithDetails(
+        **scenario_data,
+        nodes=nodes_data,
+        connections=connections_data
+    )
+
+@router.get("/{scenario_id}/versions/{version_id}/changelog")
+def get_version_changelog(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: CurrentUser
+) -> Dict[str, Any]:
+    """버전 변경 로그 조회"""
+    version = session.get(ScenarioVersion, version_id)
+    if not version or version.scenario_id != scenario_id:
+        raise HTTPException(status_code=404, detail="버전을 찾을 수 없습니다.")
+    
+    # 이전 버전과 비교
+    previous_version = session.exec(
+        select(ScenarioVersion)
+        .where(and_(
+            ScenarioVersion.scenario_id == scenario_id,
+            ScenarioVersion.created_at < version.created_at
+        ))
+        .order_by(ScenarioVersion.created_at.desc())
+    ).first()
+    
+    changelog = {
+        "version": version.version,
+        "created_at": version.created_at,
+        "notes": version.notes,
+        "tag": version.tag,
+        "change_summary": version.change_summary,
+        "auto_generated": version.auto_generated
+    }
+    
+    if previous_version:
+        version_service = ScenarioVersionService(session)
+        diff = version_service.compare_versions(previous_version.id, version.id)
+        changelog["diff"] = diff.model_dump()
+    
+    return changelog
+
 # === 시나리오 시뮬레이션 ===
+
+# === 버전 브랜치 관리 (고급 기능) ===
+
+@router.post("/{scenario_id}/versions/{parent_version_id}/branch", response_model=ScenarioVersionPublic)
+def create_version_branch(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    parent_version_id: uuid.UUID,
+    branch_data: ScenarioVersionCreate,
+    current_user: CurrentUser
+) -> ScenarioVersion:
+    """부모 버전에서 브랜치 생성"""
+    parent_version = session.get(ScenarioVersion, parent_version_id)
+    if not parent_version or parent_version.scenario_id != scenario_id:
+        raise HTTPException(status_code=404, detail="부모 버전을 찾을 수 없습니다.")
+    
+    # 브랜치 버전 생성
+    branch_version = ScenarioVersion(
+        scenario_id=scenario_id,
+        version=branch_data.version,
+        version_status=branch_data.version_status,
+        notes=branch_data.notes or f"{parent_version.version}에서 브랜치 생성",
+        tag=branch_data.tag,
+        parent_version_id=parent_version_id,
+        snapshot=parent_version.snapshot,  # 부모 스냅샷으로 시작
+        auto_generated=False,
+        created_by=current_user.id
+    )
+    
+    session.add(branch_version)
+    session.commit()
+    session.refresh(branch_version)
+    
+    return branch_version
+
+@router.get("/{scenario_id}/versions/tree")
+def get_version_tree(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    current_user: CurrentUser
+) -> Dict[str, Any]:
+    """버전 트리 구조 조회 (브랜치 포함)"""
+    versions = session.exec(
+        select(ScenarioVersion)
+        .where(ScenarioVersion.scenario_id == scenario_id)
+        .order_by(ScenarioVersion.created_at)
+    ).all()
+    
+    # 트리 구조 생성
+    version_map = {str(v.id): v for v in versions}
+    tree = {"nodes": [], "edges": []}
+    
+    for version in versions:
+        tree["nodes"].append({
+            "id": str(version.id),
+            "version": version.version,
+            "status": version.version_status,
+            "tag": version.tag,
+            "created_at": version.created_at.isoformat(),
+            "auto_generated": version.auto_generated
+        })
+        
+        if version.parent_version_id:
+            tree["edges"].append({
+                "from": str(version.parent_version_id),
+                "to": str(version.id)
+            })
+    
+    return tree
+
+# === 시나리오 시뮤레이션 ===
 
 @router.post("/{scenario_id}/simulate", response_model=ScenarioSimulationPublic)
 def start_scenario_simulation(

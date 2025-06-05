@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel, Relationship, Column
 from sqlalchemy import JSON
 from enum import Enum
+from typing import Union
 
 class ScenarioStatus(str, Enum):
     DRAFT = "draft"
@@ -11,6 +12,18 @@ class ScenarioStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     ARCHIVED = "archived"
+
+class VersionStatus(str, Enum):
+    DRAFT = "draft"
+    STABLE = "stable"
+    RELEASE = "release"
+    DEPRECATED = "deprecated"
+
+class ChangeType(str, Enum):
+    ADDED = "added"
+    MODIFIED = "modified"
+    DELETED = "deleted"
+    MOVED = "moved"
 
 class NodeType(str, Enum):
     START = "start"
@@ -48,6 +61,33 @@ class Scenario(ScenarioBase, table=True):
     deployed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+# 버전 비교 결과
+class VersionDiff(SQLModel):
+    version_from: str
+    version_to: str
+    changes: List[Dict[str, Any]]  # 변경 사항 목록
+    nodes_added: List[str] = []
+    nodes_modified: List[str] = []
+    nodes_deleted: List[str] = []
+    connections_added: List[str] = []
+    connections_modified: List[str] = []
+    connections_deleted: List[str] = []
+    summary: Dict[str, int]  # 변경 통계
+
+# 버전 롤백 요청
+class VersionRollbackRequest(SQLModel):
+    target_version_id: uuid.UUID
+    create_backup: bool = Field(default=True)
+    rollback_notes: Optional[str] = None
+
+# 버전 병합 요청
+class VersionMergeRequest(SQLModel):
+    source_version_id: uuid.UUID
+    target_version_id: uuid.UUID
+    merge_strategy: str = Field(default="auto")  # auto, manual, force
+    conflict_resolution: Optional[Dict[str, Any]] = None
+    merge_notes: Optional[str] = None
     
     # 관계 정의
     created_by_user: Optional["User"] = Relationship(
@@ -132,25 +172,40 @@ class ScenarioConnectionPublic(ScenarioConnectionBase):
     scenario_id: uuid.UUID
     created_at: datetime
 
-# 시나리오 버전 관리
+# 시나리오 버전 관리 (강화된 버전)
 class ScenarioVersionBase(SQLModel):
     version: str = Field(max_length=20)
+    version_status: VersionStatus = VersionStatus.DRAFT
     notes: Optional[str] = None
+    tag: Optional[str] = Field(default=None, max_length=50)  # 버전 태그 (예: v1.0-stable, hotfix-001)
+    parent_version_id: Optional[uuid.UUID] = Field(default=None)  # 부모 버전 (브랜치 지원)
     snapshot: Dict[str, Any] = Field(sa_column=Column(JSON))  # 전체 시나리오 스냅샷
+    change_summary: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 변경 요약
+    auto_generated: bool = Field(default=False)  # 자동 생성 여부
 
 class ScenarioVersionCreate(ScenarioVersionBase):
     scenario_id: uuid.UUID
+    auto_create: bool = Field(default=False)  # 자동 버전 생성 여부
+
+class ScenarioVersionUpdate(SQLModel):
+    version_status: Optional[VersionStatus] = None
+    notes: Optional[str] = None
+    tag: Optional[str] = None
 
 class ScenarioVersion(ScenarioVersionBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     scenario_id: uuid.UUID = Field(foreign_key="scenario.id")
     created_by: uuid.UUID = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
     
     # 관계 정의
     scenario: Optional[Scenario] = Relationship(back_populates="versions")
     created_by_user: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[ScenarioVersion.created_by]"}
+    )
+    parent_version: Optional["ScenarioVersion"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ScenarioVersion.parent_version_id]", "remote_side": "[ScenarioVersion.id]"}
     )
 
 class ScenarioVersionPublic(ScenarioVersionBase):
@@ -158,6 +213,7 @@ class ScenarioVersionPublic(ScenarioVersionBase):
     scenario_id: uuid.UUID
     created_by: uuid.UUID
     created_at: datetime
+    updated_at: datetime
 
 # 시나리오 전체 구조 (노드 + 연결 포함)
 class ScenarioWithDetails(ScenarioPublic):
