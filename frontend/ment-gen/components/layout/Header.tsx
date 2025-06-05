@@ -142,22 +142,22 @@ export default function Header({ user, onMenuToggle, isSidebarOpen }: HeaderProp
           </DropdownMenu>
 
           {/* 사용자 정보 드롭다운 */}
-          {user ? (
+          {user && (user.username || user.full_name) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-auto px-2">
                   <div className="flex items-center space-x-2">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src="" alt={user.username} />
+                      <AvatarImage src="" alt={user.username || 'User'} />
                       <AvatarFallback>
-                        {user.full_name ? user.full_name.charAt(0) : user.username.charAt(0)}
+                        {user.full_name?.charAt(0) || user.username?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="hidden md:block text-left">
-                      <p className="text-sm font-medium">{user.full_name || user.username}</p>
+                      <p className="text-sm font-medium">{user?.full_name || user?.username || 'User'}</p>
                       <div className="flex items-center space-x-1">
-                        <Badge variant="outline" className={getRoleBadgeColor(user.role)}>
-                          {getRoleDisplayName(user.role)}
+                        <Badge variant="outline" className={getRoleBadgeColor(user?.role)}>
+                          {getRoleDisplayName(user?.role)}
                         </Badge>
                       </div>
                     </div>
@@ -168,10 +168,10 @@ export default function Header({ user, onMenuToggle, isSidebarOpen }: HeaderProp
                 <DropdownMenuLabel>
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
-                      {user.full_name || user.username}
+                      {user.full_name || user.username || 'User'}
                     </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {user.email}
+                      {user.email || ''}
                     </p>
                     {user.department && (
                       <p className="text-xs leading-none text-muted-foreground">
