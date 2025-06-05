@@ -61,6 +61,26 @@ class Scenario(ScenarioBase, table=True):
     deployed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    
+    # 관계 정의
+    created_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Scenario.created_by]"}
+    )
+    updated_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Scenario.updated_by]"}
+    )
+    nodes: List["ScenarioNode"] = Relationship(
+        back_populates="scenario",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    connections: List["ScenarioConnection"] = Relationship(
+        back_populates="scenario",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    versions: List["ScenarioVersion"] = Relationship(
+        back_populates="scenario",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 # 버전 비교 결과
 class VersionDiff(SQLModel):
@@ -88,17 +108,6 @@ class VersionMergeRequest(SQLModel):
     merge_strategy: str = Field(default="auto")  # auto, manual, force
     conflict_resolution: Optional[Dict[str, Any]] = None
     merge_notes: Optional[str] = None
-    
-    # 관계 정의
-    created_by_user: Optional["User"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Scenario.created_by]"}
-    )
-    updated_by_user: Optional["User"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Scenario.updated_by]"}
-    )
-    nodes: List["ScenarioNode"] = Relationship(back_populates="scenario", cascade_delete=True)
-    connections: List["ScenarioConnection"] = Relationship(back_populates="scenario", cascade_delete=True)
-    versions: List["ScenarioVersion"] = Relationship(back_populates="scenario", cascade_delete=True)
 
 class ScenarioPublic(ScenarioBase):
     id: uuid.UUID

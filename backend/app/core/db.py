@@ -2,6 +2,9 @@ from sqlmodel import Session, create_engine, select
 from datetime import datetime
 from app.crud import users as crud
 from app.core.config import settings
+
+# Import all models to ensure proper relationship initialization
+import app.models  # This imports all models from __init__.py
 from app.models.users import User, UserCreate
 from app.models.ment import Ment
 

@@ -21,6 +21,15 @@ from .scenario import (
     ScenarioStatus, NodeType, VersionStatus, ChangeType,
     VersionDiff, VersionRollbackRequest, VersionMergeRequest
 )
+from .scenario_tts import (
+    ScenarioTTS, ScenarioTTSCreate, ScenarioTTSUpdate, ScenarioTTSPublic,
+    ScenarioTTSStatus
+)
+from .deployment import (
+    Deployment, DeploymentCreate, DeploymentUpdate, DeploymentPublic,
+    DeploymentHistory, DeploymentApproval, ApprovalRecord,
+    DeploymentEnvironment, DeploymentStatus
+)
 
 __all__ = [
     # Users
@@ -45,4 +54,11 @@ __all__ = [
     "ScenarioSimulation", "ScenarioSimulationCreate", "ScenarioSimulationPublic",
     "ScenarioStatus", "NodeType", "VersionStatus", "ChangeType",
     "VersionDiff", "VersionRollbackRequest", "VersionMergeRequest",
+    # Scenario TTS
+    "ScenarioTTS", "ScenarioTTSCreate", "ScenarioTTSUpdate", "ScenarioTTSPublic",
+    "ScenarioTTSStatus",
+    # Deployment
+    "Deployment", "DeploymentCreate", "DeploymentUpdate", "DeploymentPublic",
+    "DeploymentHistory", "DeploymentApproval", "ApprovalRecord",
+    "DeploymentEnvironment", "DeploymentStatus",
 ]
