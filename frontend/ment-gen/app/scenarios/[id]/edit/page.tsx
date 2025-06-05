@@ -29,6 +29,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import NodeEditor from "../../components/NodeEditor"
 import VersionManager from "../../components/VersionManager"
 import ScenarioStatusManager from "../../components/ScenarioStatusManager"
+import ScenarioTTSStatus from "../../components/ScenarioTTSStatus"
 import ImportExportManager from "../../../components/ImportExportManager"
 import CollaborationManager from "../../../components/CollaborationManager"
 import { 
@@ -768,10 +769,26 @@ function ScenarioEditPageContent() {
           <div className="flex-1 overflow-y-auto">
             <div className="p-4">
               <NodeEditor
-                selectedNode={selectedNode}
+                selectedNode={selectedNode ? {
+                  ...selectedNode,
+                  data: {
+                    ...selectedNode.data,
+                    scenarioId: scenario.id
+                  }
+                } : null}
                 onUpdateNode={updateNodeData}
                 onUpdateConfig={updateNodeConfig}
                 onDeleteNode={deleteSelectedNode}
+              />
+            </div>
+            
+            {/* TTS 현황 */}
+            <div className="p-4 border-t">
+              <ScenarioTTSStatus
+                scenarioId={scenario.id}
+                onStatusUpdate={(status) => {
+                  // TTS 상태 업데이트 시 필요한 처리
+                }}
               />
             </div>
             

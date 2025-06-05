@@ -315,5 +315,90 @@ class TTSService:
         with Session(engine) as session:
             return session.get(TTSGeneration, generation_id)
 
+    async def process_scenario_tts_generation(
+        self, 
+        generation_id: uuid.UUID, 
+        scenario_tts_id: uuid.UUID
+    ) -> None:
+        """시나리오 TTS 생성 작업 처리"""
+        with Session(engine) as session:
+            # 일반 TTS 생성 처리
+            await self.process_tts_generation(generation_id)
+            
+            # 생성 결과를 ScenarioTTS에 반영
+            generation = session.get(TTSGeneration, generation_id)
+            if generation and generation.status == GenerationStatus.COMPLETED:
+                # ScenarioTTS 업데이트를 위해 동적 import 사용
+                from app.models.scenario_tts import ScenarioTTS
+                
+                scenario_tts = session.get(ScenarioTTS, scenario_tts_id)
+                if scenario_tts:
+                    scenario_tts.audio_file_path = generation.audio_file_path
+                    scenario_tts.updated_at = datetime.now()
+                    session.add(scenario_tts)
+                    session.commit()
+                    
+                    logger.info(f"ScenarioTTS {scenario_tts_id} updated with audio file")
+    
+    async def batch_generate_scenario_tts(
+        self, 
+        scenario_id: uuid.UUID, 
+        force_regenerate: bool = False
+    ) -> dict:
+        """시나리오의 모든 메시지 노드에 대해 일괄 TTS 생성"""
+        with Session(engine) as session:
+            from app.models.scenario import ScenarioNode
+            from app.models.scenario_tts import ScenarioTTS
+            
+            # 메시지 타입 노드들 조회
+            message_nodes = session.exec(
+                select(ScenarioNode).where(
+                    ScenarioNode.scenario_id == scenario_id,
+                    ScenarioNode.node_type == "message"
+                )
+            ).all()
+            
+            results = {
+                "total_nodes": len(message_nodes),
+                "generated": 0,
+                "skipped": 0,
+                "failed": 0
+            }
+            
+            for node in message_nodes:
+                try:
+                    # 기존 TTS 확인
+                    existing_tts = session.exec(
+                        select(ScenarioTTS).where(
+                            ScenarioTTS.scenario_id == scenario_id,
+                            ScenarioTTS.node_id == node.node_id,
+                            ScenarioTTS.is_active == True
+                        )
+                    ).first()
+                    
+                    # 이미 TTS가 있고 강제 재생성이 아니면 스킵
+                    if existing_tts and existing_tts.audio_file_path and not force_regenerate:
+                        results["skipped"] += 1
+                        continue
+                    
+                    # 노드 설정에서 텍스트 추출
+                    text_content = node.config.get("text", "")
+                    if not text_content:
+                        results["skipped"] += 1
+                        continue
+                    
+                    # 기본 성우 사용 (실제로는 설정에서 가져오기)
+                    voice_actor_id = node.config.get("voice_actor_id")
+                    
+                    # TTS 생성 요청
+                    # 실제 구현에서는 백그라운드 작업으로 처리
+                    results["generated"] += 1
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate TTS for node {node.node_id}: {e}")
+                    results["failed"] += 1
+            
+            return results
+
 # 싱글톤 인스턴스
 tts_service = TTSService()

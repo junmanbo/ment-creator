@@ -100,33 +100,24 @@ export default function NodeEditor({
       return
     }
 
+    // 시나리오 ID 가져오기 (상위 컴포넌트에서 전달받아야 함)
+    const scenarioId = selectedNode?.data?.scenarioId
+    if (!scenarioId) {
+      toast({
+        title: "시나리오 정보 오류",
+        description: "시나리오 정보를 찾을 수 없습니다.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsGeneratingTTS(true)
     try {
       const accessToken = localStorage.getItem("access_token")
       
-      // 1. TTS 스크립트 생성
-      const scriptResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          text_content: selectedNode.data.config.text,
-          voice_actor_id: selectedNode.data.config.voice_actor_id,
-          voice_settings: selectedNode.data.config.voice_settings || {}
-        }),
-      })
-
-      if (!scriptResponse.ok) {
-        throw new Error("스크립트 생성 실패")
-      }
-
-      const script = await scriptResponse.json()
-
-      // 2. TTS 생성 요청
-      const generateResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts/${script.id}/generate`,
+      // 시나리오 전용 TTS 생성 API 사용
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenario-tts/scenario/${scenarioId}/node/${selectedNode.id}/generate`,
         {
           method: "POST",
           headers: {
@@ -134,27 +125,29 @@ export default function NodeEditor({
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
-            script_id: script.id,
-            generation_params: {
-              quality: "high"
-            }
+            scenario_id: scenarioId,
+            node_id: selectedNode.id,
+            text_content: selectedNode.data.config.text,
+            voice_actor_id: selectedNode.data.config.voice_actor_id,
+            voice_settings: selectedNode.data.config.voice_settings || {}
           }),
         }
       )
 
-      if (generateResponse.ok) {
-        const generation = await generateResponse.json()
+      if (response.ok) {
+        const result = await response.json()
         
-        // 노드에 TTS 생성 ID 저장
-        onUpdateConfig("tts_generation_id", generation.id)
+        // 노드에 시나리오 TTS ID와 생성 ID 저장
+        onUpdateConfig("scenario_tts_id", result.scenario_tts_id)
+        onUpdateConfig("tts_generation_id", result.generation_id)
         
         toast({
           title: "TTS 생성 시작",
-          description: "음성 생성이 시작되었습니다. 잠시 후 결과를 확인해주세요.",
+          description: "시나리오 전용 음성 생성이 시작되었습니다.",
         })
 
         // 생성 상태 폴링
-        pollTTSStatus(generation.id)
+        pollTTSStatus(result.generation_id)
       } else {
         throw new Error("TTS 생성 요청 실패")
       }
