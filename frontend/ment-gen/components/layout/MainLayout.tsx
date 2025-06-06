@@ -6,15 +6,7 @@ import Header from "./Header"
 import Sidebar from "./Sidebar"
 import Footer from "./Footer"
 import { cn } from "@/lib/utils"
-
-interface User {
-  id: string
-  username: string
-  full_name?: string
-  email?: string
-  role?: string
-  department?: string
-}
+import { useAppSelector } from "../../app/store/hooks"
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -26,10 +18,11 @@ const publicPaths = ["/login", "/register", "/forgot-password"]
 
 export default function MainLayout({ children, className }: MainLayoutProps) {
   const pathname = usePathname()
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  
+  // Redux store에서 사용자 정보 가져오기
+  const { user, loading: isLoading } = useAppSelector((state) => state.auth)
 
   // 공개 페이지인지 확인
   const isPublicPage = publicPaths.includes(pathname)
@@ -48,45 +41,6 @@ export default function MainLayout({ children, className }: MainLayoutProps) {
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
-
-  // 사용자 정보 로드
-  useEffect(() => {
-    const loadUser = async () => {
-      if (isPublicPage) {
-        setIsLoading(false)
-        return
-      }
-
-      try {
-        const token = localStorage.getItem("access_token")
-        if (!token) {
-          setIsLoading(false)
-          return
-        }
-
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/users/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (response.ok) {
-          const userData = await response.json()
-          setUser(userData)
-        } else if (response.status === 401) {
-          // 토큰이 만료되었거나 유효하지 않은 경우
-          localStorage.removeItem("access_token")
-          localStorage.removeItem("refresh_token")
-        }
-      } catch (error) {
-        console.error("Failed to load user:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadUser()
-  }, [pathname, isPublicPage])
 
   // 사이드바 토글
   const handleSidebarToggle = () => {

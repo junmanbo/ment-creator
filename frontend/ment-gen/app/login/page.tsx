@@ -44,7 +44,7 @@ export default function LoginPage() {
 
       if (response.ok) {
         const data = await response.json()
-        dispatch(login(data.access_token))
+        dispatch(login({ token: data.access_token }))
         localStorage.setItem("access_token", data.access_token)
         toast({
           title: "로그인 성공",
