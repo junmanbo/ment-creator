@@ -164,7 +164,7 @@ export default function TTSManagementPage() {
       params.append("sort_order", sortOrder)
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/tts-generations?${params.toString()}`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-generations?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,

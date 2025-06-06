@@ -23,7 +23,13 @@ from app.models.tts import (
     TTSLibrary, TTSLibraryCreate, TTSLibraryUpdate, TTSLibraryPublic,
     GenerationStatus
 )
+
 from app.services.tts_service import tts_service
+
+# TTS Generation with Script info
+class TTSGenerationWithScript(TTSGenerationPublic):
+    script: Optional[TTSScriptPublic] = None
+    voice_actor_name: Optional[str] = None
 
 router = APIRouter(prefix="/voice-actors", tags=["voice-actors"])
 
@@ -317,6 +323,72 @@ def stream_generated_audio(
                 yield chunk
     
     return StreamingResponse(iterfile(), media_type="audio/wav")
+
+@router.get("/tts-generations", response_model=List[TTSGenerationWithScript])
+def get_tts_generations(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 20,
+    status: Optional[GenerationStatus] = None,
+    voice_actor_id: Optional[uuid.UUID] = None,
+    search: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc"
+) -> List[TTSGenerationWithScript]:
+    """TTS 생성 목록 조회 (스크립트 정보 포함)"""
+    # 스크립트와 성우 정보를 함께 조회
+    statement = (
+        select(
+            TTSGeneration,
+            TTSScript,
+            VoiceActor.name.label("voice_actor_name")
+        )
+        .join(TTSScript, TTSGeneration.script_id == TTSScript.id)
+        .outerjoin(VoiceActor, TTSScript.voice_actor_id == VoiceActor.id)
+        .where(TTSGeneration.requested_by == current_user.id)
+    )
+    
+    # 필터 적용
+    if status:
+        statement = statement.where(TTSGeneration.status == status)
+    
+    if voice_actor_id:
+        statement = statement.where(TTSScript.voice_actor_id == voice_actor_id)
+    
+    if search:
+        search_term = f"%{search}%"
+        statement = statement.where(TTSScript.text_content.ilike(search_term))
+    
+    # 정렬
+    if sort_by == "created_at":
+        order_column = TTSGeneration.created_at
+    elif sort_by == "quality_score":
+        order_column = TTSGeneration.quality_score
+    elif sort_by == "duration":
+        order_column = TTSGeneration.duration
+    else:
+        order_column = TTSGeneration.created_at
+    
+    if sort_order == "desc":
+        order_column = order_column.desc()
+    else:
+        order_column = order_column.asc()
+    
+    statement = statement.order_by(order_column).offset(skip).limit(limit)
+    
+    results = session.exec(statement).all()
+    
+    # 결과를 TTSGenerationWithScript 형태로 변환
+    generations = []
+    for generation, script, voice_actor_name in results:
+        generation_dict = generation.model_dump()
+        generation_dict["script"] = script.model_dump() if script else None
+        generation_dict["voice_actor_name"] = voice_actor_name
+        generations.append(TTSGenerationWithScript(**generation_dict))
+    
+    return generations
 
 @router.delete("/tts-generations/{generation_id}")
 async def cancel_tts_generation(
