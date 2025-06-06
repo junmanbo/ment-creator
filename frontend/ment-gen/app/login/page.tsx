@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2, Shield, Phone } from "lucide-react"
-import { useAppDispatch } from "../store/hooks"
-import { login } from "../store/authSlice"
+import { useAppDispatch, useAppSelector } from "../store/hooks"
+import { login, fetchUserProfile } from "../store/authSlice"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -19,6 +19,28 @@ export default function LoginPage() {
   const router = useRouter()
   const dispatch = useAppDispatch()
   const { toast } = useToast()
+  
+  // Redux store에서 로그인 상태 확인
+  const { isLoggedIn, loading } = useAppSelector((state) => state.auth)
+  
+  // 이미 로그인된 사용자는 대시보드로 리다이렉트
+  useEffect(() => {
+    if (!loading && isLoggedIn) {
+      router.push("/")
+    }
+  }, [isLoggedIn, loading, router])
+
+  // 로딩 중이거나 이미 로그인된 사용자는 로딩 화면 표시
+  if (loading || isLoggedIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-sm text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    )
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,8 +66,14 @@ export default function LoginPage() {
 
       if (response.ok) {
         const data = await response.json()
+        
+        // Redux store에 로그인 상태 저장
         dispatch(login({ token: data.access_token }))
         localStorage.setItem("access_token", data.access_token)
+        
+        // 사용자 정보 로드
+        dispatch(fetchUserProfile())
+        
         toast({
           title: "로그인 성공",
           description: "시스템에 로그인되었습니다.",

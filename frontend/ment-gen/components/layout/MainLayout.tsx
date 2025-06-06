@@ -79,7 +79,6 @@ export default function MainLayout({ children, className }: MainLayoutProps) {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <Header
-        user={user}
         onMenuToggle={handleSidebarToggle}
         isSidebarOpen={isSidebarOpen}
       />

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -23,24 +23,21 @@ import {
   X,
   Shield
 } from "lucide-react"
-
-interface User {
-  id: string
-  username: string
-  full_name?: string
-  email?: string
-  role?: string
-  department?: string
-}
+import { useAppSelector, useAppDispatch } from "../../app/store/hooks"
+import { logout } from "../../app/store/authSlice"
 
 interface HeaderProps {
-  user?: User | null
   onMenuToggle?: () => void
   isSidebarOpen?: boolean
 }
 
-export default function Header({ user, onMenuToggle, isSidebarOpen }: HeaderProps) {
+export default function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
   const router = useRouter()
+  const dispatch = useAppDispatch()
+  
+  // Redux store에서 사용자 정보 가져오기
+  const { user, isLoggedIn } = useAppSelector((state) => state.auth)
+  
   const [notifications] = useState([
     { id: 1, message: "TTS 생성이 완료되었습니다.", time: "5분 전" },
     { id: 2, message: "새 시나리오가 배포되었습니다.", time: "10분 전" },
@@ -48,8 +45,14 @@ export default function Header({ user, onMenuToggle, isSidebarOpen }: HeaderProp
   ])
 
   const handleLogout = () => {
+    // Redux store에서 로그아웃 처리
+    dispatch(logout())
+    
+    // 로컬 스토리지에서 토큰 제거
     localStorage.removeItem("access_token")
     localStorage.removeItem("refresh_token")
+    
+    // 로그인 페이지로 이동
     router.push("/login")
   }
 
@@ -112,37 +115,39 @@ export default function Header({ user, onMenuToggle, isSidebarOpen }: HeaderProp
 
         {/* 오른쪽: 알림, 사용자 정보, 로그아웃 */}
         <div className="flex items-center space-x-4">
-          {/* 알림 드롭다운 */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-5 w-5" />
-                {notifications.length > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
-                    {notifications.length}
-                  </Badge>
+          {/* 로그인된 사용자만 알림 표시 */}
+          {isLoggedIn && user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="relative">
+                  <Bell className="h-5 w-5" />
+                  {notifications.length > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
+                      {notifications.length}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel>알림</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {notifications.map((notification) => (
+                  <DropdownMenuItem key={notification.id} className="flex flex-col items-start p-3">
+                    <p className="text-sm">{notification.message}</p>
+                    <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
+                  </DropdownMenuItem>
+                ))}
+                {notifications.length === 0 && (
+                  <DropdownMenuItem disabled>
+                    새로운 알림이 없습니다.
+                  </DropdownMenuItem>
                 )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>알림</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {notifications.map((notification) => (
-                <DropdownMenuItem key={notification.id} className="flex flex-col items-start p-3">
-                  <p className="text-sm">{notification.message}</p>
-                  <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
-                </DropdownMenuItem>
-              ))}
-              {notifications.length === 0 && (
-                <DropdownMenuItem disabled>
-                  새로운 알림이 없습니다.
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
-          {/* 사용자 정보 드롭다운 */}
-          {user && (user.username || user.full_name) ? (
+          {/* 사용자 정보 드롭다운 또는 로그인/회원가입 버튼 */}
+          {isLoggedIn && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-auto px-2">
