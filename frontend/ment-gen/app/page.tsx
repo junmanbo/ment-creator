@@ -188,7 +188,7 @@ export default function DashboardPage() {
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/tts/generate">
+            <Link href="/tts">
               <Volume2 className="h-4 w-4 mr-2" />
               TTS 생성
             </Link>

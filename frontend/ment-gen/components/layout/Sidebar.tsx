@@ -99,13 +99,13 @@ const menuItems: MenuItem[] = [
     badgeVariant: "destructive" as const,
     children: [
       {
-        title: "TTS 생성",
-        href: "/tts/generate",
+        title: "TTS 생성 & 관리",
+        href: "/tts",
         icon: Volume2,
       },
       {
-        title: "생성 현황",
-        href: "/tts/status",
+        title: "멘트 목록",
+        href: "/list",
         icon: Activity,
       },
       {
@@ -116,28 +116,30 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    title: "시스템",
-    href: "/system",
-    icon: Monitor,
+    title: "시스템 모니터링",
+    href: "/monitoring",
+    icon: BarChart3,
+    badge: "실시간",
+    badgeVariant: "secondary" as const,
     children: [
       {
-        title: "모니터링",
-        href: "/system/monitoring",
+        title: "실시간 모니터링",
+        href: "/monitoring",
         icon: BarChart3,
       },
       {
         title: "배포 관리",
-        href: "/system/deployment",
+        href: "/monitoring/deployment",
         icon: Activity,
       },
       {
         title: "로그 관리",
-        href: "/system/logs",
+        href: "/monitoring/logs",
         icon: FileText,
       },
       {
         title: "알림 설정",
-        href: "/system/notifications",
+        href: "/monitoring/notifications",
         icon: Bell,
       },
     ],
