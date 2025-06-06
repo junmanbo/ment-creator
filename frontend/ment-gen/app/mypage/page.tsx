@@ -51,13 +51,21 @@ export default function MyPage() {
 
   useEffect(() => {
     if (user) {
+      // 로컬 스토리지에서 부서 정보 불러오기
+      const savedDepartment = localStorage.getItem(`user_department_${user.id}`) || ""
+      
       setEditForm({
         full_name: user.full_name || "",
         email: user.email || "",
-        department: user.department || ""
+        department: user.department || savedDepartment
       })
+      
+      // Redux store에도 부서 정보 업데이트 (만약 없다면)
+      if (!user.department && savedDepartment) {
+        dispatch(setUser({ ...user, department: savedDepartment }))
+      }
     }
-  }, [user])
+  }, [user, dispatch])
 
   const handleEditToggle = () => {
     if (isEditing) {
@@ -77,31 +85,55 @@ export default function MyPage() {
     setIsUpdating(true)
     try {
       const token = localStorage.getItem("access_token")
+      
+      // 백엔드 모델에 맞는 데이터만 전송 (department 제외)
+      const updateData = {
+        full_name: editForm.full_name,
+        email: editForm.email,
+        // department는 백엔드 모델에 없으므로 제외
+      }
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/users/me`, {
-        method: "PUT",
+        method: "PATCH", // PUT에서 PATCH로 변경
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(updateData),
       })
 
       if (response.ok) {
         const updatedUser = await response.json()
-        dispatch(setUser(updatedUser))
+        
+        // 부서 정보는 로컬 스토리지에 저장
+        if (editForm.department) {
+          localStorage.setItem(`user_department_${user.id}`, editForm.department)
+        } else {
+          localStorage.removeItem(`user_department_${user.id}`)
+        }
+        
+        // Redux store에 부서 정보와 함께 업데이트
+        const userWithDepartment = {
+          ...updatedUser,
+          department: editForm.department
+        }
+        
+        dispatch(setUser(userWithDepartment))
         setIsEditing(false)
         toast({
           title: "프로필 업데이트 성공",
           description: "사용자 정보가 성공적으로 업데이트되었습니다.",
         })
       } else {
-        throw new Error("업데이트 실패")
+        const errorData = await response.json().catch(() => ({}))
+        console.error("업데이트 실패:", response.status, errorData)
+        throw new Error(`업데이트 실패: ${response.status}`)
       }
     } catch (error) {
       console.error("Update error:", error)
       toast({
         title: "업데이트 실패",
-        description: "사용자 정보 업데이트 중 오류가 발생했습니다.",
+        description: error instanceof Error ? error.message : "사용자 정보 업데이트 중 오류가 발생했습니다.",
         variant: "destructive",
       })
     } finally {
@@ -308,6 +340,7 @@ export default function MyPage() {
                       className={!isEditing ? "bg-gray-50" : ""}
                       placeholder="부서를 입력하세요"
                     />
+                    <p className="text-xs text-gray-500">부서 정보는 로컬 스토리지에 저장됩니다.</p>
                   </div>
                 </div>
 
