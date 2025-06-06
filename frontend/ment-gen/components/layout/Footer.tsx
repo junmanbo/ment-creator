@@ -38,19 +38,49 @@ export default function Footer({ className }: FooterProps) {
     database: "connected",
     tts_service: "available",
     user_count: 12,
-    last_updated: new Date().toLocaleTimeString()
+    last_updated: "" // 초기값을 빈 문자열로 설정
   })
+  
+  const [isOnline, setIsOnline] = useState<boolean | null>(null) // 초기값을 null로 설정
+  const [currentTime, setCurrentTime] = useState<string>("") // 현재 시간 상태
+  const [isMounted, setIsMounted] = useState(false) // 마운트 상태 추적
 
-  // 시스템 상태 업데이트 (실제 구현 시에는 API 호출)
+  // 컴포넌트 마운트 후에만 시간 및 온라인 상태 설정
   useEffect(() => {
-    const interval = setInterval(() => {
+    setIsMounted(true)
+    const updateTime = () => {
+      const now = new Date().toLocaleTimeString('ko-KR', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+      setCurrentTime(now)
       setSystemStatus(prev => ({
         ...prev,
-        last_updated: new Date().toLocaleTimeString()
+        last_updated: now
       }))
-    }, 30000) // 30초마다 업데이트
+    }
+    
+    // 초기 시간 설정
+    updateTime()
+    setIsOnline(navigator?.onLine ?? true)
+    
+    // 30초마다 시간 업데이트
+    const interval = setInterval(updateTime, 30000)
+    
+    // 온라인/오프라인 이벤트 리스너
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
 
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
   }, [])
 
   const getStatusColor = (status: string) => {
@@ -177,38 +207,44 @@ export default function Footer({ className }: FooterProps) {
                       {getStatusText("tts_service", systemStatus.tts_service)}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between space-x-4">
-                    <span>마지막 업데이트:</span>
-                    <span className="text-gray-400">{systemStatus.last_updated}</span>
-                  </div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* 네트워크 상태 */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="text-gray-600">
-                  {navigator?.onLine !== false ? (
-                    <Wifi className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <WifiOff className="h-4 w-4 text-red-500" />
+                  {isMounted && systemStatus.last_updated && (
+                    <div className="flex items-center justify-between space-x-4">
+                      <span>마지막 업데이트:</span>
+                      <span className="text-gray-400">{systemStatus.last_updated}</span>
+                    </div>
                   )}
                 </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{navigator?.onLine !== false ? "온라인" : "오프라인"}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
-          {/* 마지막 업데이트 시간 */}
-          <div className="hidden lg:flex items-center text-gray-500 text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            <span>{systemStatus.last_updated}</span>
-          </div>
+          {/* 네트워크 상태 - 클라이언트에서만 렌더링 */}
+          {isMounted && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-gray-600">
+                    {isOnline ? (
+                      <Wifi className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <WifiOff className="h-4 w-4 text-red-500" />
+                    )}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isOnline ? "온라인" : "오프라인"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* 마지막 업데이트 시간 - 클라이언트에서만 렌더링 */}
+          {isMounted && currentTime && (
+            <div className="hidden lg:flex items-center text-gray-500 text-xs">
+              <Clock className="h-3 w-3 mr-1" />
+              <span>{currentTime}</span>
+            </div>
+          )}
         </div>
       </div>
 
