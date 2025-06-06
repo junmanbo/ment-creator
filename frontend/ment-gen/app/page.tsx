@@ -31,7 +31,8 @@ import {
   PlayCircle,
   FileText,
   Volume2,
-  Settings
+  Settings,
+  BarChart3
 } from "lucide-react"
 import Link from "next/link"
 
