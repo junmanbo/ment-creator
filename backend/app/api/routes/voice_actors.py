@@ -502,14 +502,54 @@ def get_batch_generation_status(
 
 # === 음성 모델 관리 ===
 
-@router.get("/models/test")
-def test_models_api(*, current_user: CurrentUser):
-    """모델 API 테스트 엔드포인트"""
-    return {
-        "message": "Voice models API is working", 
-        "timestamp": datetime.now().isoformat(),
-        "user_id": str(current_user.id)
-    }
+@router.get("/models/debug")
+def debug_voice_models_api(*, current_user: CurrentUser, session: SessionDep):
+    """모델 API 디버깅 엔드포인트"""
+    logger.info("Debug voice models API called")
+    
+    try:
+        # 1. 기본 정보 반환
+        result = {
+            "message": "Voice models debug API is working",
+            "timestamp": datetime.now().isoformat(),
+            "user_id": str(current_user.id)
+        }
+        
+        # 2. 데이터베이스 연결 테스트
+        try:
+            count_result = session.exec(select(VoiceModel))
+            models = count_result.all()
+            result["voice_models_count"] = len(models)
+            result["voice_models"] = [
+                {
+                    "id": str(model.id),
+                    "model_name": model.model_name,
+                    "status": model.status,
+                    "voice_actor_id": str(model.voice_actor_id)
+                } for model in models[:3]  # 처음 3개만
+            ]
+        except Exception as db_error:
+            result["database_error"] = str(db_error)
+            result["voice_models_count"] = -1
+        
+        # 3. 성우 개수 확인
+        try:
+            actors_result = session.exec(select(VoiceActor))
+            actors = actors_result.all()
+            result["voice_actors_count"] = len(actors)
+        except Exception as actors_error:
+            result["voice_actors_error"] = str(actors_error)
+            result["voice_actors_count"] = -1
+            
+        return result
+        
+    except Exception as e:
+        logger.error(f"Debug API error: {e}")
+        return {
+            "message": "Debug API error",
+            "error": str(e),
+            "error_type": str(type(e))
+        }
 
 @router.post("/models", response_model=VoiceModelPublic)
 def create_voice_model(
@@ -590,17 +630,31 @@ def get_voice_models(
     status: Optional[ModelStatus] = None
 ) -> List[VoiceModel]:
     """음성 모델 목록 조회"""
-    statement = select(VoiceModel)
+    logger.info(f"get_voice_models called with: skip={skip}, limit={limit}, voice_actor_id={voice_actor_id}, status={status}")
     
-    # 필터 적용
-    if voice_actor_id:
-        statement = statement.where(VoiceModel.voice_actor_id == voice_actor_id)
-    if status:
-        statement = statement.where(VoiceModel.status == status)
-    
-    statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
-    voice_models = session.exec(statement).all()
-    return voice_models
+    try:
+        statement = select(VoiceModel)
+        
+        # 필터 적용
+        if voice_actor_id:
+            logger.info(f"Filtering by voice_actor_id: {voice_actor_id}")
+            statement = statement.where(VoiceModel.voice_actor_id == voice_actor_id)
+        if status:
+            logger.info(f"Filtering by status: {status}")
+            statement = statement.where(VoiceModel.status == status)
+        
+        statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
+        
+        logger.info(f"Executing query: {statement}")
+        voice_models = session.exec(statement).all()
+        
+        logger.info(f"Found {len(voice_models)} voice models")
+        return voice_models
+        
+    except Exception as e:
+        logger.error(f"Error in get_voice_models: {e}")
+        logger.error(f"Error type: {type(e)}")
+        raise HTTPException(status_code=500, detail=f"음성 모델 조회 중 오류: {str(e)}")
 
 @router.get("/models/{model_id}", response_model=VoiceModelPublic)
 def get_voice_model(
