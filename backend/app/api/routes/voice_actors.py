@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
 from sqlmodel import SQLModel
@@ -32,6 +33,12 @@ class TTSGenerationWithScript(TTSGenerationPublic):
     voice_actor_name: Optional[str] = None
 
 router = APIRouter(prefix="/voice-actors", tags=["voice-actors"])
+
+# 테스트 엔드포인트
+@router.get("/test")
+def test_voice_actors_api():
+    """API 테스트 엔드포인트"""
+    return {"message": "Voice actors API is working", "timestamp": datetime.now().isoformat()}
 
 # === 성우 관리 ===
 
@@ -495,6 +502,15 @@ def get_batch_generation_status(
 
 # === 음성 모델 관리 ===
 
+@router.get("/models/test")
+def test_models_api(current_user: CurrentUser = Depends()):
+    """모델 API 테스트 엔드포인트"""
+    return {
+        "message": "Voice models API is working", 
+        "timestamp": datetime.now().isoformat(),
+        "user_id": str(current_user.id)
+    }
+
 @router.post("/models", response_model=VoiceModelPublic)
 def create_voice_model(
     *,
@@ -503,10 +519,15 @@ def create_voice_model(
     current_user: CurrentUser
 ) -> VoiceModel:
     """새 음성 모델 생성"""
+    logger.info(f"Creating voice model: {model_in.model_dump()}")
+    
     # 성우 존재 확인
     voice_actor = session.get(VoiceActor, model_in.voice_actor_id)
     if not voice_actor:
+        logger.error(f"Voice actor {model_in.voice_actor_id} not found")
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
+    
+    logger.info(f"Found voice actor: {voice_actor.name}")
     
     # 모델 경로 생성
     model_dir = Path("voice_models") / str(model_in.voice_actor_id)
@@ -515,16 +536,26 @@ def create_voice_model(
     model_filename = f"{model_in.model_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.pth"
     model_path = model_dir / model_filename
     
-    voice_model = VoiceModel(
-        **model_in.model_dump(exclude={"voice_actor_id"}),
-        voice_actor_id=model_in.voice_actor_id,
-        model_path=str(model_path)
-    )
+    logger.info(f"Model will be saved to: {model_path}")
     
-    session.add(voice_model)
-    session.commit()
-    session.refresh(voice_model)
-    return voice_model
+    try:
+        voice_model = VoiceModel(
+            **model_in.model_dump(exclude={"voice_actor_id"}),
+            voice_actor_id=model_in.voice_actor_id,
+            model_path=str(model_path)
+        )
+        
+        session.add(voice_model)
+        session.commit()
+        session.refresh(voice_model)
+        
+        logger.info(f"Voice model created successfully: {voice_model.id}")
+        return voice_model
+        
+    except Exception as e:
+        logger.error(f"Failed to create voice model: {e}")
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"모델 생성 중 오류 발생: {str(e)}")
 
 @router.get("/models", response_model=List[VoiceModelPublic])
 def get_voice_models(
