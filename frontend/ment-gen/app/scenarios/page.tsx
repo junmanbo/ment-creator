@@ -475,11 +475,22 @@ export default function ScenariosPage() {
             새로고침
           </Button>
           
+          {/* 플로우차트 에디터로 바로 이동 */}
+          <Button 
+            size="lg" 
+            onClick={() => router.push("/scenarios/create")}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            플로우차트로 생성
+          </Button>
+          
+          {/* 간단 생성 다이얼로그 */}
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="lg">
+              <Button size="lg" variant="outline">
                 <Plus className="h-4 w-4 mr-2" />
-                새 시나리오
+                간단 생성
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
