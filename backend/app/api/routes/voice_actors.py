@@ -503,7 +503,7 @@ def get_batch_generation_status(
 # === 음성 모델 관리 ===
 
 @router.get("/models/test")
-def test_models_api(current_user: CurrentUser = Depends()):
+def test_models_api(*, current_user: CurrentUser):
     """모델 API 테스트 엔드포인트"""
     return {
         "message": "Voice models API is working", 
