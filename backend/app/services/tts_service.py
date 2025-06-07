@@ -457,5 +457,101 @@ class TTSService:
             
             return results
 
+    async def train_voice_model(self, model_id: uuid.UUID) -> None:
+        """음성 모델 학습 처리 (백그라운드 작업)"""
+        with Session(engine) as session:
+            from app.models.voice_actor import VoiceModel, ModelStatus
+            
+            voice_model = session.get(VoiceModel, model_id)
+            if not voice_model:
+                logger.error(f"Voice model {model_id} not found")
+                return
+            
+            try:
+                logger.info(f"Starting training for voice model {model_id}")
+                
+                # 성우의 음성 샘플들 수집
+                samples = session.exec(
+                    select(VoiceSample).where(
+                        VoiceSample.voice_actor_id == voice_model.voice_actor_id
+                    )
+                ).all()
+                
+                if len(samples) < 3:
+                    raise ValueError("최소 3개의 음성 샘플이 필요합니다.")
+                
+                # 학습 데이터 준비
+                sample_paths = [sample.audio_file_path for sample in samples]
+                sample_texts = [sample.text_content for sample in samples]
+                
+                # 실제 학습 (현재는 Mock 구현)
+                training_duration = await self._mock_model_training(
+                    voice_model, sample_paths, sample_texts
+                )
+                
+                # 모델 상태 업데이트
+                voice_model.status = ModelStatus.READY
+                voice_model.training_data_duration = training_duration
+                voice_model.quality_score = 85.0 + (len(samples) * 2)  # 샘플 수에 따른 품질 점수
+                voice_model.updated_at = datetime.now()
+                
+                session.add(voice_model)
+                session.commit()
+                
+                logger.info(f"Voice model {model_id} training completed successfully")
+                
+            except Exception as e:
+                logger.error(f"Voice model {model_id} training failed: {e}")
+                
+                # 에러 상태로 업데이트
+                voice_model.status = ModelStatus.ERROR
+                voice_model.updated_at = datetime.now()
+                
+                session.add(voice_model)
+                session.commit()
+    
+    async def _mock_model_training(
+        self,
+        voice_model,
+        sample_paths: List[str],
+        sample_texts: List[str]
+    ) -> int:
+        """Mock 모델 학습 (실제 학습 구현까지의 임시)"""
+        logger.info(f"Mock training for model {voice_model.model_name}")
+        
+        # 학습 시뮬레이션 (실제로는 GPU에서 수 시간 소요)
+        training_time = len(sample_paths) * 5  # 샘플 당 5초씩 훈련 시뮬레이션
+        await asyncio.sleep(min(training_time, 30))  # 최대 30초로 제한 (테스트용)
+        
+        # 학습 데이터 총 시간 계산
+        total_duration = 0
+        for sample_path in sample_paths:
+            try:
+                duration = await self._get_audio_duration(sample_path)
+                total_duration += duration
+            except Exception:
+                total_duration += 10  # 기본값 10초
+        
+        return int(total_duration)
+    
+    async def get_model_training_status(self, model_id: uuid.UUID) -> Optional[dict]:
+        """모델 학습 상태 조회"""
+        with Session(engine) as session:
+            from app.models.voice_actor import VoiceModel
+            
+            voice_model = session.get(VoiceModel, model_id)
+            if not voice_model:
+                return None
+            
+            return {
+                "model_id": str(voice_model.id),
+                "model_name": voice_model.model_name,
+                "status": voice_model.status,
+                "quality_score": voice_model.quality_score,
+                "training_duration": voice_model.training_data_duration,
+                "created_at": voice_model.created_at.isoformat(),
+                "updated_at": voice_model.updated_at.isoformat()
+            }
+
 # 싱글톤 인스턴스
 tts_service = TTSService()
