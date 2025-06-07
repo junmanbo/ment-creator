@@ -19,6 +19,8 @@ import {
   ConnectionMode,
   useReactFlow,
   ReactFlowProvider,
+  Handle,
+  Position,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
@@ -74,18 +76,41 @@ interface ScenarioEdge extends Edge {
   }
 }
 
-// 노드 컴포넌트들
+// 노드 컴포넌트들 (Handle 추가)
 const StartNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-green-100 border-2 ${selected ? 'border-green-500' : 'border-green-300'}`}>
     <div className="flex items-center space-x-2">
       <Phone className="h-4 w-4 text-green-600" />
       <span className="text-sm font-medium">{data.label || "시작"}</span>
     </div>
+    {/* 출력 핸들만 있음 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#22c55e',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
 const MessageNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-blue-100 border-2 ${selected ? 'border-blue-500' : 'border-blue-300'} min-w-[150px]`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#3b82f6',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center space-x-2">
       <MessageSquare className="h-4 w-4 text-blue-600" />
       <span className="text-sm font-medium">{data.label || "메시지"}</span>
@@ -93,29 +118,127 @@ const MessageNode = ({ data, selected }: { data: any; selected: boolean }) => (
     {data.config?.text && (
       <p className="text-xs text-gray-600 mt-1 truncate">{data.config.text.substring(0, 30)}...</p>
     )}
+    
+    {/* 출력 핸들 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#3b82f6',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
 const BranchNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-yellow-100 border-2 ${selected ? 'border-yellow-500' : 'border-yellow-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center space-x-2">
       <GitBranch className="h-4 w-4 text-yellow-600" />
       <span className="text-sm font-medium">{data.label || "분기"}</span>
     </div>
+    
+    {/* 여러 출력 핸들 (분기용) */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="option-1"
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '25%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="option-2"
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '50%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="option-3"
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '75%',
+      }}
+    />
   </div>
 )
 
 const TransferNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-purple-100 border-2 ${selected ? 'border-purple-500' : 'border-purple-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#a855f7',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center space-x-2">
       <PhoneCall className="h-4 w-4 text-purple-600" />
       <span className="text-sm font-medium">{data.label || "상담원"}</span>
     </div>
+    
+    {/* 출력 핸들 (상담원 연결 후 다른 플로우로 갈 수 있음) */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#a855f7',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
 const EndNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-red-100 border-2 ${selected ? 'border-red-500' : 'border-red-300'}`}>
+    {/* 입력 핸들만 있음 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#ef4444',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center space-x-2">
       <Square className="h-4 w-4 text-red-600" />
       <span className="text-sm font-medium">{data.label || "종료"}</span>
@@ -125,10 +248,34 @@ const EndNode = ({ data, selected }: { data: any; selected: boolean }) => (
 
 const InputNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-gray-100 border-2 ${selected ? 'border-gray-500' : 'border-gray-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#6b7280',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center space-x-2">
       <Mic className="h-4 w-4 text-gray-600" />
       <span className="text-sm font-medium">{data.label || "입력"}</span>
     </div>
+    
+    {/* 출력 핸들 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#6b7280',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
@@ -478,15 +625,24 @@ function ScenarioEditPageContent() {
     }
   }
 
-  // 엣지 연결 처리
+  // 엣지 연결 처리 (개선된 스타일)
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge({
+      const edge = {
         ...params,
         markerEnd: {
           type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#555',
         },
-      }, eds))
+        style: {
+          strokeWidth: 2,
+          stroke: '#555',
+        },
+        type: 'smoothstep', // 부드러운 연결선
+      }
+      setEdges((eds) => addEdge(edge, eds))
       setHasUnsavedChanges(true)
     },
     [setEdges]
@@ -495,6 +651,11 @@ function ScenarioEditPageContent() {
   // 노드 선택 처리
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
     setSelectedNode(node as ScenarioNode)
+  }, [])
+
+  // 캔버스 클릭 (노드 선택 해제)
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null)
   }, [])
 
   // 자동 레이아웃 함수들
@@ -1172,13 +1333,26 @@ function ScenarioEditPageContent() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
             connectionMode={ConnectionMode.Loose}
             fitView
+            attributionPosition="top-right"
+            connectionLineStyle={{ strokeWidth: 2, stroke: '#555' }}
+            defaultEdgeOptions={{
+              style: { strokeWidth: 2, stroke: '#555' },
+              type: 'smoothstep',
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#555' },
+            }}
           >
-            <Background />
+            <Background color="#f0f0f0" gap={20} />
             <Controls />
-            <MiniMap />
+            <MiniMap 
+              nodeStrokeColor="#555"
+              nodeColor="#f0f0f0"
+              pannable
+              zoomable
+            />
             <Panel position="top-right">
               <div className="bg-white p-3 rounded-lg shadow-lg border space-y-3">
                 <div>
