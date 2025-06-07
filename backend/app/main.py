@@ -16,7 +16,9 @@ import app.models  # noqa: F401
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
-    return f"{route.tags[0]}-{route.name}"
+    # Handle routes without tags gracefully
+    tag = route.tags[0] if route.tags else "default"
+    return f"{tag}-{route.name}"
 
 
 @asynccontextmanager
@@ -51,8 +53,8 @@ if settings.all_cors_origins:
         allow_headers=["*"],
     )
 
-# Add OpenAI-compatible /v1/models endpoint
-@app.get("/v1/models")
+# Add OpenAI-compatible models endpoint (outside of /api/v1 for compatibility)
+@app.get("/models", tags=["models"])
 async def list_models(
     current_user: CurrentUser = Depends(),
     session: SessionDep = Depends()
