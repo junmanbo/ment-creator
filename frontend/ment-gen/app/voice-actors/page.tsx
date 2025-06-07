@@ -130,7 +130,17 @@ export default function VoiceActorsPage() {
   
   const { toast } = useToast()
 
+  // API Base URL 유틸리티 함수
+  const getApiUrl = (endpoint: string) => {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'
+    return `${apiBaseUrl}${endpoint}`
+  }
+
   useEffect(() => {
+    // API Base URL 디버깅
+    console.log('API Base URL:', process.env.NEXT_PUBLIC_API_BASE_URL)
+    console.log('Current ENV:', process.env.NODE_ENV)
+    
     fetchVoiceActors()
   }, [])
   
@@ -144,7 +154,10 @@ export default function VoiceActorsPage() {
   const fetchVoiceActors = async () => {
     try {
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors`, {
+      
+      console.log('Fetching voice actors from:', getApiUrl('/voice-actors'))
+      
+      const response = await fetch(getApiUrl('/voice-actors'), {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -176,7 +189,7 @@ export default function VoiceActorsPage() {
     try {
       const accessToken = localStorage.getItem("access_token")
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${actorId}/samples`,
+        getApiUrl(`/voice-actors/${actorId}/samples`),
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -196,7 +209,7 @@ export default function VoiceActorsPage() {
   const createVoiceActor = async () => {
     try {
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors`, {
+      const response = await fetch(getApiUrl('/voice-actors'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -258,7 +271,7 @@ export default function VoiceActorsPage() {
       const accessToken = localStorage.getItem("access_token")
       
       // 1. TTS 스크립트 생성
-      const scriptResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts`, {
+      const scriptResponse = await fetch(getApiUrl('/voice-actors/tts-scripts'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -282,7 +295,7 @@ export default function VoiceActorsPage() {
 
       // 2. TTS 생성 요청
       const generateResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts/${script.id}/generate`,
+        getApiUrl(`/voice-actors/tts-scripts/${script.id}/generate`),
         {
           method: "POST",
           headers: {
@@ -330,7 +343,7 @@ export default function VoiceActorsPage() {
     const poll = async () => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-generations/${generationId}`,
+          getApiUrl(`/voice-actors/tts-generations/${generationId}`),
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -379,7 +392,7 @@ export default function VoiceActorsPage() {
       if (librarySearch) params.append("search", librarySearch)
       
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library?${params}`,
+        getApiUrl(`/voice-actors/tts-library?${params}`),
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -402,7 +415,7 @@ export default function VoiceActorsPage() {
     try {
       const accessToken = localStorage.getItem("access_token")
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library/categories`,
+        getApiUrl('/voice-actors/tts-library/categories'),
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -422,7 +435,7 @@ export default function VoiceActorsPage() {
   const createLibraryItem = async () => {
     try {
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library`, {
+      const response = await fetch(getApiUrl('/voice-actors/tts-library'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -467,7 +480,7 @@ export default function VoiceActorsPage() {
     try {
       const accessToken = localStorage.getItem("access_token")
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library/${itemId}/use`,
+        getApiUrl(`/voice-actors/tts-library/${itemId}/use`),
         {
           method: "POST",
           headers: {
@@ -510,7 +523,7 @@ export default function VoiceActorsPage() {
       formData.append("text_content", sampleText)
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${selectedActor.id}/samples`,
+        getApiUrl(`/voice-actors/${selectedActor.id}/samples`),
         {
           method: "POST",
           headers: {
@@ -558,9 +571,9 @@ export default function VoiceActorsPage() {
       let url = ""
       
       if (audioType === "sample") {
-        url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${selectedActor?.id}/samples/${audioId}/audio`
+        url = getApiUrl(`/voice-actors/${selectedActor?.id}/samples/${audioId}/audio`)
       } else {
-        url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-generations/${audioId}/audio`
+        url = getApiUrl(`/voice-actors/tts-generations/${audioId}/audio`)
       }
 
       const response = await fetch(url, {
