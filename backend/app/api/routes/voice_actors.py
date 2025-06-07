@@ -557,6 +557,28 @@ def create_voice_model(
         session.rollback()
         raise HTTPException(status_code=500, detail=f"모델 생성 중 오류 발생: {str(e)}")
 
+@router.post("/{voice_actor_id}/models", response_model=VoiceModelPublic)
+def create_voice_model_legacy(
+    *,
+    session: SessionDep,
+    voice_actor_id: uuid.UUID,
+    model_in: VoiceModelCreate,
+    current_user: CurrentUser
+) -> VoiceModel:
+    """새 음성 모델 생성 (Legacy 경로 - deprecated)"""
+    logger.warning(f"Using deprecated voice model creation endpoint: /voice-actors/{voice_actor_id}/models")
+    logger.warning("Please use /voice-actors/models instead")
+    
+    # voice_actor_id를 model_in에 설정
+    model_in.voice_actor_id = voice_actor_id
+    
+    # 기존 create_voice_model 함수 호출
+    return create_voice_model(
+        session=session,
+        model_in=model_in,
+        current_user=current_user
+    )
+
 @router.get("/models", response_model=List[VoiceModelPublic])
 def get_voice_models(
     *,
