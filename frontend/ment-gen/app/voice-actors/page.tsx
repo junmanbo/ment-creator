@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
+import { useSearchParams } from "next/navigation"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -118,6 +119,10 @@ export default function VoiceActorsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("actors")
   
+  // URL 쿼리 파라미터 처리
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  
   // 새 성우 등록 상태
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newActor, setNewActor] = useState({
@@ -193,6 +198,13 @@ export default function VoiceActorsPage() {
     
     fetchVoiceActors()
   }, [])
+  
+  // URL 쿼리 파라미터에 따른 탭 설정
+  useEffect(() => {
+    if (tabParam && ['actors', 'models', 'tts', 'library'].includes(tabParam)) {
+      setActiveTab(tabParam)
+    }
+  }, [tabParam])
   
   useEffect(() => {
     if (activeTab === "library") {
