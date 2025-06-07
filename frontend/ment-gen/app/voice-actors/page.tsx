@@ -375,7 +375,7 @@ export default function VoiceActorsPage() {
     try {
       const accessToken = localStorage.getItem("access_token")
       const params = new URLSearchParams()
-      if (selectedCategory) params.append("category", selectedCategory)
+      if (selectedCategory && selectedCategory !== "all") params.append("category", selectedCategory)
       if (librarySearch) params.append("search", librarySearch)
       
       const response = await fetch(
@@ -430,7 +430,7 @@ export default function VoiceActorsPage() {
         },
         body: JSON.stringify({
           ...newLibraryItem,
-          voice_actor_id: newLibraryItem.voice_actor_id || null
+          voice_actor_id: newLibraryItem.voice_actor_id === "default" ? null : newLibraryItem.voice_actor_id || null
         }),
       })
 
@@ -875,7 +875,7 @@ export default function VoiceActorsPage() {
                       <SelectValue placeholder="성우를 선택하세요" />
                     </SelectTrigger>
                     <SelectContent>
-                      {voiceActors.filter(actor => actor.is_active).map((actor) => (
+                      {voiceActors.filter(actor => actor.is_active && actor.id && actor.id.trim()).map((actor) => (
                         <SelectItem key={actor.id} value={actor.id}>
                           {actor.name} ({actor.gender === "male" ? "남성" : actor.gender === "female" ? "여성" : "중성"}, {actor.age_range})
                         </SelectItem>
@@ -1031,8 +1031,8 @@ export default function VoiceActorsPage() {
                                 <SelectValue placeholder="선택 사항" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">기본 음성</SelectItem>
-                                {voiceActors.filter(actor => actor.is_active).map((actor) => (
+                                <SelectItem value="default">기본 음성</SelectItem>
+                                {voiceActors.filter(actor => actor.is_active && actor.id && actor.id.trim()).map((actor) => (
                                   <SelectItem key={actor.id} value={actor.id}>
                                     {actor.name}
                                   </SelectItem>
@@ -1094,8 +1094,8 @@ export default function VoiceActorsPage() {
                       <SelectValue placeholder="카테고리 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">전체 카테고리</SelectItem>
-                      {libraryCategories.map((category) => (
+                      <SelectItem value="all">전체 카테고리</SelectItem>
+                      {libraryCategories.filter(category => category && category.trim()).map((category) => (
                         <SelectItem key={category} value={category}>
                           {category}
                         </SelectItem>
@@ -1179,7 +1179,7 @@ export default function VoiceActorsPage() {
                           variant="outline"
                           onClick={() => {
                             setTtsText(item.text_content)
-                            if (item.voice_actor_id) {
+                            if (item.voice_actor_id && item.voice_actor_id !== "default") {
                               setSelectedActorForTts(item.voice_actor_id)
                             }
                             setActiveTab("tts")
