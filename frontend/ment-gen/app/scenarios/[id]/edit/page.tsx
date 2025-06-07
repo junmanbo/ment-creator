@@ -255,16 +255,23 @@ function ScenarioEditPageContent() {
     setChangeTracker(tracker)
   }
 
-  // 자동 버전 생성
+  // 자동 버전 생성 (개선된 에러 처리)
   const createAutoVersion = async (changeDescription?: string) => {
     if (!scenario || !autoVersionEnabled) return null
 
     try {
       const accessToken = localStorage.getItem("access_token")
-      if (!accessToken) return null
+      if (!accessToken) {
+        console.warn("No access token available for auto version creation")
+        return null
+      }
 
       const changes = getChangeDescription()
       const description = changeDescription || changes || "자동 생성된 버전"
+
+      // 네트워크 요청 timeout 설정
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10초 timeout
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/versions/auto?change_description=${encodeURIComponent(description)}`,
@@ -272,9 +279,13 @@ function ScenarioEditPageContent() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
+          signal: controller.signal,
         }
       )
+
+      clearTimeout(timeoutId)
 
       if (response.ok) {
         const newVersion = await response.json()
@@ -302,9 +313,31 @@ function ScenarioEditPageContent() {
         })
 
         return newVersion
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: "Unknown error" }))
+        console.warn(`Auto version creation failed: ${response.status} - ${errorData.detail}`)
+        
+        // 401 오류인 경우에만 토스트 표시
+        if (response.status === 401) {
+          toast({
+            title: "인증 만료",
+            description: "자동 버전 생성을 위해 다시 로그인해주세요.",
+            variant: "destructive",
+          })
+        }
       }
     } catch (error) {
-      console.error("Auto version creation error:", error)
+      console.warn("Auto version creation error:", error)
+      
+      // 네트워크 에러인 경우 사용자에게 알림 (선택적)
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          console.warn("Auto version creation timed out")
+        } else if (error.message.includes('fetch')) {
+          console.warn("Network error during auto version creation - backend server may be down")
+          // 네트워크 에러는 조용히 처리 (사용자에게 알리지 않음)
+        }
+      }
     }
     return null
   }
@@ -660,11 +693,14 @@ function ScenarioEditPageContent() {
     setHasUnsavedChanges(true)
   }
 
-  // 시나리오 저장 (자동 버전 생성 포함)
+  // 시나리오 저장 (개선된 자동 버전 생성 포함)
   const saveScenario = async (createVersion: boolean = false) => {
     if (!scenario) return
     
     setIsSaving(true)
+    let saveSuccessful = false
+    let newVersion = null
+    
     try {
       const accessToken = localStorage.getItem("access_token")
       if (!accessToken) {
@@ -680,12 +716,19 @@ function ScenarioEditPageContent() {
       const currentNodes = getNodes()
       const currentEdges = getEdges()
       
-      // 중요한 변경 사항이 있고 자동 버전이 활성화된 경우 자동 버전 생성
-      let newVersion = null
+      // 자동 버전 생성 시도 (실패해도 저장은 계속 진행)
       if ((createVersion || (autoVersionEnabled && hasSignificantChanges())) && hasUnsavedChanges) {
         const changeDesc = getChangeDescription()
         if (changeDesc) {
-          newVersion = await createAutoVersion(changeDesc)
+          try {
+            newVersion = await createAutoVersion(changeDesc)
+            if (newVersion) {
+              console.log(`Auto version created: ${newVersion.version}`)
+            }
+          } catch (versionError) {
+            console.warn("Auto version creation failed, continuing with save:", versionError)
+            // 버전 생성 실패해도 저장은 계속 진행
+          }
         }
       }
       
@@ -778,6 +821,8 @@ function ScenarioEditPageContent() {
         connections_deleted: []
       })
       
+      saveSuccessful = true
+      
       toast({
         title: "저장 완료",
         description: newVersion 
@@ -786,14 +831,34 @@ function ScenarioEditPageContent() {
         duration: newVersion ? 5000 : 3000
       })
       
-      // 시나리오 데이터 다시 로드하여 최신 상태 유지
-      await loadScenario(scenario.id)
+      // 저장 성공 시에만 시나리오 데이터 다시 로드
+      if (saveSuccessful) {
+        try {
+          await loadScenario(scenario.id)
+        } catch (reloadError) {
+          console.warn("Failed to reload scenario after save:", reloadError)
+          // 리로드 실패는 사용자에게 알리지 않음 (저장은 성공했으므로)
+        }
+      }
       
     } catch (error) {
       console.error("Save scenario error:", error)
+      
+      let errorMessage = "시나리오 저장 중 오류가 발생했습니다."
+      
+      if (error instanceof Error) {
+        if (error.message.includes('fetch')) {
+          errorMessage = "백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."
+        } else if (error.name === 'AbortError') {
+          errorMessage = "요청 시간이 초과되었습니다. 다시 시도해주세요."
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
       toast({
         title: "저장 실패",
-        description: error instanceof Error ? error.message : "시나리오 저장 중 오류가 발생했습니다.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
