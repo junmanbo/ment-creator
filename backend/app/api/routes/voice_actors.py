@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
 from sqlmodel import SQLModel
@@ -492,6 +493,177 @@ def get_batch_generation_status(
         "generations": [TTSGenerationPublic.model_validate(g) for g in generations],
         "summary": status_summary
     }
+
+# === 음성 모델 관리 ===
+
+@router.post("/{voice_actor_id}/models", response_model=VoiceModelPublic)
+def create_voice_model(
+    *,
+    session: SessionDep,
+    voice_actor_id: uuid.UUID,
+    model_in: VoiceModelCreate,
+    current_user: CurrentUser
+) -> VoiceModel:
+    """새 음성 모델 생성"""
+    # 성우 존재 확인
+    voice_actor = session.get(VoiceActor, voice_actor_id)
+    if not voice_actor:
+        raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
+    
+    # 동일한 모델명 중복 확인
+    existing_model = session.exec(
+        select(VoiceModel).where(
+            VoiceModel.voice_actor_id == voice_actor_id,
+            VoiceModel.model_name == model_in.model_name
+        )
+    ).first()
+    
+    if existing_model:
+        raise HTTPException(status_code=400, detail="동일한 모델명이 이미 존재합니다.")
+    
+    # 모델 파일 경로 생성
+    model_dir = Path("voice_models") / str(voice_actor_id)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_filename = f"{model_in.model_name}_{model_in.model_version}.pt"
+    model_path = model_dir / model_filename
+    
+    voice_model = VoiceModel(
+        voice_actor_id=voice_actor_id,
+        model_path=str(model_path),
+        **model_in.model_dump()
+    )
+    session.add(voice_model)
+    session.commit()
+    session.refresh(voice_model)
+    return voice_model
+
+@router.get("/{voice_actor_id}/models", response_model=List[VoiceModelPublic])
+def get_voice_models(
+    *,
+    session: SessionDep,
+    voice_actor_id: uuid.UUID,
+    current_user: CurrentUser,
+    status: Optional[ModelStatus] = None
+) -> List[VoiceModel]:
+    """성우의 음성 모델 목록 조회"""
+    statement = select(VoiceModel).where(VoiceModel.voice_actor_id == voice_actor_id)
+    
+    if status:
+        statement = statement.where(VoiceModel.status == status)
+    
+    statement = statement.order_by(VoiceModel.created_at.desc())
+    models = session.exec(statement).all()
+    return models
+
+@router.get("/models", response_model=List[VoiceModelPublic])
+def get_all_voice_models(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 50,
+    status: Optional[ModelStatus] = None,
+    voice_actor_id: Optional[uuid.UUID] = None
+) -> List[VoiceModel]:
+    """모든 음성 모델 목록 조회"""
+    statement = select(VoiceModel)
+    
+    # 필터 적용
+    if status:
+        statement = statement.where(VoiceModel.status == status)
+    if voice_actor_id:
+        statement = statement.where(VoiceModel.voice_actor_id == voice_actor_id)
+    
+    statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
+    models = session.exec(statement).all()
+    return models
+
+@router.get("/models/{model_id}", response_model=VoiceModelPublic)
+def get_voice_model(
+    *,
+    session: SessionDep,
+    model_id: uuid.UUID,
+    current_user: CurrentUser
+) -> VoiceModel:
+    """특정 음성 모델 조회"""
+    model = session.get(VoiceModel, model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
+    return model
+
+@router.put("/models/{model_id}", response_model=VoiceModelPublic)
+def update_voice_model(
+    *,
+    session: SessionDep,
+    model_id: uuid.UUID,
+    model_in: VoiceModelUpdate,
+    current_user: CurrentUser
+) -> VoiceModel:
+    """음성 모델 정보 수정"""
+    model = session.get(VoiceModel, model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
+    
+    update_data = model_in.model_dump(exclude_unset=True)
+    model.sqlmodel_update(update_data)
+    model.updated_at = datetime.now()
+    
+    session.add(model)
+    session.commit()
+    session.refresh(model)
+    return model
+
+@router.delete("/models/{model_id}")
+def delete_voice_model(
+    *,
+    session: SessionDep,
+    model_id: uuid.UUID,
+    current_user: CurrentUser
+):
+    """음성 모델 삭제"""
+    model = session.get(VoiceModel, model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
+    
+    # 모델 파일 삭제
+    model_path = Path(model.model_path)
+    if model_path.exists():
+        model_path.unlink()
+    
+    session.delete(model)
+    session.commit()
+    
+    return {"message": "음성 모델이 삭제되었습니다."}
+
+@router.post("/models/{model_id}/train")
+async def train_voice_model(
+    *,
+    session: SessionDep,
+    model_id: uuid.UUID,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks
+):
+    """음성 모델 학습 시작"""
+    model = session.get(VoiceModel, model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
+    
+    if model.status == ModelStatus.TRAINING:
+        raise HTTPException(status_code=400, detail="이미 학습 중인 모델입니다.")
+    
+    # 학습 상태로 변경
+    model.status = ModelStatus.TRAINING
+    model.updated_at = datetime.now()
+    session.add(model)
+    session.commit()
+    
+    # 백그라운드에서 모델 학습 처리
+    background_tasks.add_task(
+        tts_service.train_voice_model,
+        model_id
+    )
+    
+    return {"message": "음성 모델 학습이 시작되었습니다."}
 
 # === TTS 라이브러리 관리 ===
 

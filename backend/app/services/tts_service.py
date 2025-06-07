@@ -456,6 +456,123 @@ class TTSService:
                     results["failed"] += 1
             
             return results
+    
+    async def train_voice_model(self, model_id: uuid.UUID) -> None:
+        """음성 모델 학습 실행"""
+        from app.models.voice_actor import VoiceModel, ModelStatus
+        
+        with Session(engine) as session:
+            # 모델 조회
+            model = session.get(VoiceModel, model_id)
+            if not model:
+                logger.error(f"Voice model {model_id} not found")
+                return
+            
+            try:
+                logger.info(f"Starting training for voice model {model_id}")
+                
+                # 성우 정보 조회
+                voice_actor = session.get(VoiceActor, model.voice_actor_id)
+                if not voice_actor:
+                    raise ValueError("Voice actor not found")
+                
+                # 학습 데이터 준비
+                training_data = await self._prepare_training_data(voice_actor, session)
+                if not training_data:
+                    raise ValueError("No training data available")
+                
+                # 실제 학습 수행 (모크 버전)
+                await self._perform_voice_model_training(
+                    model, 
+                    training_data, 
+                    model.config or {}
+                )
+                
+                # 모델 학습 완료 후 상태 업데이트
+                model.status = ModelStatus.READY
+                model.quality_score = 85.0 + (len(training_data) * 2)  # 간단한 품질 점수 계산
+                model.updated_at = datetime.now()
+                
+                session.add(model)
+                session.commit()
+                
+                logger.info(f"Voice model {model_id} training completed successfully")
+                
+            except Exception as e:
+                logger.error(f"Voice model {model_id} training failed: {e}")
+                
+                # 실패 상태로 업데이트
+                model.status = ModelStatus.ERROR
+                model.updated_at = datetime.now()
+                
+                session.add(model)
+                session.commit()
+    
+    async def _prepare_training_data(self, voice_actor: VoiceActor, session: Session) -> List[dict]:
+        """음성 모델 학습을 위한 데이터 준비"""
+        # 성우의 음성 샘플들 조회
+        statement = select(VoiceSample).where(
+            VoiceSample.voice_actor_id == voice_actor.id
+        )
+        samples = session.exec(statement).all()
+        
+        training_data = []
+        for sample in samples:
+            audio_path = Path(sample.audio_file_path)
+            if audio_path.exists():
+                training_data.append({
+                    "audio_path": str(audio_path),
+                    "text": sample.text_content,
+                    "duration": sample.duration,
+                    "sample_rate": sample.sample_rate
+                })
+        
+        logger.info(f"Prepared {len(training_data)} training samples for {voice_actor.name}")
+        return training_data
+    
+    async def _perform_voice_model_training(
+        self, 
+        model: "VoiceModel", 
+        training_data: List[dict], 
+        config: dict
+    ) -> None:
+        """실제 음성 모델 학습 수행"""
+        # 실제 학습 로직 시뮬레이션 (모크)
+        learning_rate = config.get("learning_rate", 0.001)
+        batch_size = config.get("batch_size", 32)
+        epochs = config.get("epochs", 100)
+        
+        logger.info(f"Training voice model with config: lr={learning_rate}, batch_size={batch_size}, epochs={epochs}")
+        
+        # 학습 시뮬레이션 (실제 구현에서는 XTTS 학습 로직 사용)
+        total_steps = epochs * (len(training_data) // batch_size)
+        
+        for epoch in range(epochs):
+            # 에폭 당 학습 시뮬레이션
+            await asyncio.sleep(0.1)  # 실제 학습 시간 시뮬레이션
+            
+            if epoch % 10 == 0:
+                logger.info(f"Training epoch {epoch}/{epochs}")
+        
+        # 모델 파일 저장 시뮬레이션
+        model_path = Path(model.model_path)
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 간단한 모델 파일 생성 (실제로는 학습된 모델 저장)
+        model_info = {
+            "model_name": model.model_name,
+            "model_version": model.model_version,
+            "voice_actor_id": str(model.voice_actor_id),
+            "training_samples": len(training_data),
+            "config": config,
+            "trained_at": datetime.now().isoformat()
+        }
+        
+        import json
+        with open(model_path, 'w') as f:
+            json.dump(model_info, f, indent=2)
+        
+        logger.info(f"Voice model saved to {model_path}")
 
 # 싱글톤 인스턴스
 tts_service = TTSService()
