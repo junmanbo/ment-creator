@@ -56,8 +56,8 @@ if settings.all_cors_origins:
 # Add OpenAI-compatible models endpoint (outside of /api/v1 for compatibility)
 @app.get("/models", tags=["models"])
 async def list_models(
-    current_user: CurrentUser = Depends(),
-    session: SessionDep = Depends()
+    current_user: CurrentUser,
+    session: SessionDep
 ):
     """OpenAI-compatible models endpoint for TTS libraries"""
     try:
