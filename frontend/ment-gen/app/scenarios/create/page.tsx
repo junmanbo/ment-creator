@@ -18,6 +18,8 @@ import {
   Panel,
   MarkerType,
   NodeTypes,
+  Handle,
+  Position,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -49,18 +51,41 @@ import {
   Loader2
 } from "lucide-react"
 
-// 커스텀 노드 컴포넌트들
+// 커스텀 노드 컴포넌트들 (Handle 추가)
 const StartNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-green-100 border-2 ${selected ? 'border-green-500' : 'border-green-300'}`}>
     <div className="flex items-center">
       <Phone className="h-4 w-4 mr-2 text-green-600" />
       <div className="text-green-800 font-medium">{data.label}</div>
     </div>
+    {/* 출력 핸들만 있음 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#22c55e',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
 const MessageNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-blue-100 border-2 ${selected ? 'border-blue-500' : 'border-blue-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#3b82f6',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center">
       <MessageSquare className="h-4 w-4 mr-2 text-blue-600" />
       <div className="text-blue-800 font-medium">{data.label}</div>
@@ -70,29 +95,127 @@ const MessageNode = ({ data, selected }: { data: any; selected: boolean }) => (
         {data.content}
       </div>
     )}
+    
+    {/* 출력 핸들 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#3b82f6',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
 const BranchNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-yellow-100 border-2 ${selected ? 'border-yellow-500' : 'border-yellow-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center">
       <GitBranch className="h-4 w-4 mr-2 text-yellow-600" />
       <div className="text-yellow-800 font-medium">{data.label}</div>
     </div>
+    
+    {/* 여러 출력 핸들 (분기용) */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="option-1"
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '25%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="option-2"
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '50%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="option-3"
+      style={{
+        background: '#eab308',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '75%',
+      }}
+    />
   </div>
 )
 
 const TransferNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-purple-100 border-2 ${selected ? 'border-purple-500' : 'border-purple-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#a855f7',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center">
       <UserX className="h-4 w-4 mr-2 text-purple-600" />
       <div className="text-purple-800 font-medium">{data.label}</div>
     </div>
+    
+    {/* 출력 핸들 (상담원 연결 후 다른 플로우로 갈 수 있음) */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#a855f7',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
 const EndNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-red-100 border-2 ${selected ? 'border-red-500' : 'border-red-300'}`}>
+    {/* 입력 핸들만 있음 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#ef4444',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center">
       <Square className="h-4 w-4 mr-2 text-red-600" />
       <div className="text-red-800 font-medium">{data.label}</div>
@@ -102,10 +225,34 @@ const EndNode = ({ data, selected }: { data: any; selected: boolean }) => (
 
 const InputNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <div className={`px-4 py-2 shadow-md rounded-md bg-teal-100 border-2 ${selected ? 'border-teal-500' : 'border-teal-300'}`}>
+    {/* 입력 핸들 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#14b8a6',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
     <div className="flex items-center">
       <Mic className="h-4 w-4 mr-2 text-teal-600" />
       <div className="text-teal-800 font-medium">{data.label}</div>
     </div>
+    
+    {/* 출력 핸들 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#14b8a6',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
   </div>
 )
 
@@ -210,17 +357,22 @@ function FlowEditor({
     { type: 'input', icon: Mic, label: '입력', color: 'bg-teal-50 border-teal-200 text-teal-800' },
   ]
 
-  // 연결 생성
+  // 연결 생성 (개선된 스타일)
   const onConnect = useCallback(
     (params: Connection) => {
       const edge = {
         ...params,
         markerEnd: {
           type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#555',
         },
         style: {
           strokeWidth: 2,
+          stroke: '#555',
         },
+        type: 'smoothstep', // 부드러운 연결선
       }
       setEdges((eds) => addEdge(edge, eds))
     },
@@ -237,6 +389,12 @@ function FlowEditor({
       nodeType: node.data.nodeType || node.type || 'message',
       config: node.data.config || {}
     })
+  }, [setSelectedNode, setSelectedNodeData])
+
+  // 캔버스 클릭 (노드 선택 해제)
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null)
+    setSelectedNodeData(null)
   }, [setSelectedNode, setSelectedNodeData])
 
   // 드래그 시작
@@ -325,6 +483,18 @@ function FlowEditor({
           </CardContent>
         </Card>
 
+        {/* 연결 가이드 */}
+        <Card className="mx-4 mb-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs">연결 가이드</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground space-y-1">
+            <p>• 노드의 원형 점이 <strong>연결점</strong>입니다</p>
+            <p>• <strong>출발점</strong>에서 <strong>도착점</strong>으로 드래그하세요</p>
+            <p>• 분기 노드는 여러 연결점을 가집니다</p>
+          </CardContent>
+        </Card>
+
         {/* 선택된 노드 속성 */}
         {selectedNodeData && (
           <Card className="mx-4 mb-4">
@@ -364,6 +534,29 @@ function FlowEditor({
                     rows={3}
                     className="mt-1 resize-none"
                   />
+                  <div className="mt-2 space-y-1">
+                    <Button size="sm" variant="outline" className="w-full">
+                      <Mic className="h-4 w-4 mr-2" />
+                      TTS 생성
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {selectedNodeData.nodeType === 'branch' && (
+                <div>
+                  <Label className="text-xs">분기 옵션</Label>
+                  <div className="mt-1 space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      • 키 1: 첫 번째 선택지
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      • 키 2: 두 번째 선택지  
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      • 키 9: 상담원 연결
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -388,15 +581,27 @@ function FlowEditor({
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
             onDrop={onDrop}
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}
             fitView
             attributionPosition="top-right"
+            connectionLineStyle={{ strokeWidth: 2, stroke: '#555' }}
+            defaultEdgeOptions={{
+              style: { strokeWidth: 2, stroke: '#555' },
+              type: 'smoothstep',
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#555' },
+            }}
           >
-            <MiniMap />
+            <MiniMap 
+              nodeStrokeColor="#555"
+              nodeColor="#f0f0f0"
+              pannable
+              zoomable
+            />
             <Controls />
-            <Background />
+            <Background color="#f0f0f0" gap={20} />
             <Panel position="top-left">
               <div className="text-sm text-muted-foreground bg-white px-2 py-1 rounded shadow">
                 노드: {nodes.length} | 연결: {edges.length}
