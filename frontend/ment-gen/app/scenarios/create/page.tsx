@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   ReactFlow,
@@ -12,12 +12,12 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   Connection,
   ReactFlowProvider,
   Panel,
   MarkerType,
   NodeTypes,
-  EdgeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -39,9 +39,7 @@ import {
   Save, 
   Play, 
   ArrowLeft,
-  Plus,
   Trash2,
-  Settings,
   Phone,
   MessageSquare,
   GitBranch,
@@ -171,30 +169,37 @@ const initialNodes: Node[] = [
 
 const initialEdges: Edge[] = []
 
-export default function CreateScenarioPage() {
-  const router = useRouter()
-  const { toast } = useToast()
+// 메인 플로우 컴포넌트 (ReactFlowProvider 내부)
+function FlowEditor({
+  nodes,
+  edges,
+  setNodes,
+  setEdges,
+  onNodesChange,
+  onEdgesChange,
+  selectedNode,
+  selectedNodeData,
+  setSelectedNode,
+  setSelectedNodeData,
+  updateSelectedNodeData,
+  deleteSelectedNode
+}: {
+  nodes: Node[]
+  edges: Edge[]
+  setNodes: React.Dispatch<React.SetStateAction<Node[]>>
+  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>
+  onNodesChange: any
+  onEdgesChange: any
+  selectedNode: Node | null
+  selectedNodeData: NodeData | null
+  setSelectedNode: React.Dispatch<React.SetStateAction<Node | null>>
+  setSelectedNodeData: React.Dispatch<React.SetStateAction<NodeData | null>>
+  updateSelectedNodeData: (field: keyof NodeData, value: any) => void
+  deleteSelectedNode: () => void
+}) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
-  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
+  const { screenToFlowPosition } = useReactFlow()
   
-  // 시나리오 기본 정보
-  const [scenarioForm, setScenarioForm] = useState<ScenarioFormData>({
-    name: "",
-    description: "",
-    category: "",
-    is_template: false
-  })
-  
-  // React Flow 상태
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
-  const [selectedNodeData, setSelectedNodeData] = useState<NodeData | null>(null)
-  
-  // UI 상태
-  const [isSaving, setIsSaving] = useState(false)
-  const [showNodePanel, setShowNodePanel] = useState(true)
-
   // 노드 팔레트 설정
   const nodePalette = [
     { type: 'start', icon: Phone, label: '시작', color: 'bg-green-50 border-green-200 text-green-800' },
@@ -232,7 +237,7 @@ export default function CreateScenarioPage() {
       nodeType: node.data.nodeType || node.type || 'message',
       config: node.data.config || {}
     })
-  }, [])
+  }, [setSelectedNode, setSelectedNodeData])
 
   // 드래그 시작
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
@@ -251,16 +256,16 @@ export default function CreateScenarioPage() {
     (event: React.DragEvent) => {
       event.preventDefault()
 
-      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect()
       const type = event.dataTransfer.getData('application/reactflow')
 
-      if (typeof type === 'undefined' || !type || !reactFlowInstance || !reactFlowBounds) {
+      if (typeof type === 'undefined' || !type) {
         return
       }
 
-      const position = reactFlowInstance.project({
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
+      // screenToFlowPosition을 사용하여 좌표 변환
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
       })
 
       const nodeId = `${type}-${Date.now()}`
@@ -278,7 +283,7 @@ export default function CreateScenarioPage() {
 
       setNodes((nds) => nds.concat(newNode))
     },
-    [reactFlowInstance, setNodes]
+    [screenToFlowPosition, setNodes]
   )
 
   // 노드 타입별 기본 라벨
@@ -293,6 +298,137 @@ export default function CreateScenarioPage() {
       default: return '노드'
     }
   }
+
+  return (
+    <>
+      {/* 좌측 사이드바 - 노드 팔레트 */}
+      <div className="w-80 bg-gray-50 border-r flex flex-col">
+        {/* 노드 팔레트 */}
+        <Card className="m-4 mb-2 flex-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">노드 팔레트</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              노드를 드래그해서 캔버스에 추가하세요
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {nodePalette.slice(1).map((item) => (
+              <NodePaletteItem
+                key={item.type}
+                type={item.type}
+                icon={item.icon}
+                label={item.label}
+                color={item.color}
+                onDragStart={onDragStart}
+              />
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* 선택된 노드 속성 */}
+        {selectedNodeData && (
+          <Card className="mx-4 mb-4">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm">노드 속성</CardTitle>
+                {selectedNode?.data.nodeType !== 'start' && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteSelectedNode}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label htmlFor="node-label" className="text-xs">노드 이름</Label>
+                <Input
+                  id="node-label"
+                  value={selectedNodeData.label}
+                  onChange={(e) => updateSelectedNodeData('label', e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              
+              {selectedNodeData.nodeType === 'message' && (
+                <div>
+                  <Label htmlFor="node-content" className="text-xs">멘트 내용</Label>
+                  <Textarea
+                    id="node-content"
+                    value={selectedNodeData.content || ''}
+                    onChange={(e) => updateSelectedNodeData('content', e.target.value)}
+                    placeholder="고객에게 전달할 멘트를 입력하세요"
+                    rows={3}
+                    className="mt-1 resize-none"
+                  />
+                </div>
+              )}
+              
+              <div>
+                <Label className="text-xs">노드 타입</Label>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {selectedNodeData.nodeType}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* 메인 캔버스 */}
+      <div className="flex-1 relative">
+        <div className="w-full h-full" ref={reactFlowWrapper}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            nodeTypes={nodeTypes}
+            fitView
+            attributionPosition="top-right"
+          >
+            <MiniMap />
+            <Controls />
+            <Background />
+            <Panel position="top-left">
+              <div className="text-sm text-muted-foreground bg-white px-2 py-1 rounded shadow">
+                노드: {nodes.length} | 연결: {edges.length}
+              </div>
+            </Panel>
+          </ReactFlow>
+        </div>
+      </div>
+    </>
+  )
+}
+
+export default function CreateScenarioPage() {
+  const router = useRouter()
+  const { toast } = useToast()
+  
+  // 시나리오 기본 정보
+  const [scenarioForm, setScenarioForm] = useState<ScenarioFormData>({
+    name: "",
+    description: "",
+    category: "",
+    is_template: false
+  })
+  
+  // React Flow 상태
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
+  const [selectedNodeData, setSelectedNodeData] = useState<NodeData | null>(null)
+  
+  // UI 상태
+  const [isSaving, setIsSaving] = useState(false)
 
   // 선택된 노드 데이터 업데이트
   const updateSelectedNodeData = (field: keyof NodeData, value: any) => {
@@ -527,10 +663,9 @@ export default function CreateScenarioPage() {
       </div>
 
       <div className="flex-1 flex">
-        {/* 좌측 사이드바 */}
-        <div className="w-80 bg-gray-50 border-r flex flex-col">
-          {/* 시나리오 기본 정보 */}
-          <Card className="m-4 mb-2">
+        {/* 시나리오 기본 정보 입력 */}
+        <div className="w-80 bg-white border-r p-4">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">시나리오 정보</CardTitle>
             </CardHeader>
@@ -579,114 +714,25 @@ export default function CreateScenarioPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* 노드 팔레트 */}
-          {showNodePanel && (
-            <Card className="mx-4 mb-2 flex-1">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">노드 팔레트</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  노드를 드래그해서 캔버스에 추가하세요
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {nodePalette.slice(1).map((item) => (
-                  <NodePaletteItem
-                    key={item.type}
-                    type={item.type}
-                    icon={item.icon}
-                    label={item.label}
-                    color={item.color}
-                    onDragStart={onDragStart}
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 선택된 노드 속성 */}
-          {selectedNodeData && (
-            <Card className="mx-4 mb-4">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">노드 속성</CardTitle>
-                  {selectedNode?.data.nodeType !== 'start' && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={deleteSelectedNode}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label htmlFor="node-label" className="text-xs">노드 이름</Label>
-                  <Input
-                    id="node-label"
-                    value={selectedNodeData.label}
-                    onChange={(e) => updateSelectedNodeData('label', e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                
-                {selectedNodeData.nodeType === 'message' && (
-                  <div>
-                    <Label htmlFor="node-content" className="text-xs">멘트 내용</Label>
-                    <Textarea
-                      id="node-content"
-                      value={selectedNodeData.content || ''}
-                      onChange={(e) => updateSelectedNodeData('content', e.target.value)}
-                      placeholder="고객에게 전달할 멘트를 입력하세요"
-                      rows={3}
-                      className="mt-1 resize-none"
-                    />
-                  </div>
-                )}
-                
-                <div>
-                  <Label className="text-xs">노드 타입</Label>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {selectedNodeData.nodeType}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
-        {/* 메인 캔버스 */}
-        <div className="flex-1 relative">
-          <ReactFlowProvider>
-            <div className="w-full h-full" ref={reactFlowWrapper}>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={onNodeClick}
-                onInit={setReactFlowInstance}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
-                nodeTypes={nodeTypes}
-                fitView
-                attributionPosition="top-right"
-              >
-                <MiniMap />
-                <Controls />
-                <Background />
-                <Panel position="top-left">
-                  <div className="text-sm text-muted-foreground bg-white px-2 py-1 rounded shadow">
-                    노드: {nodes.length} | 연결: {edges.length}
-                  </div>
-                </Panel>
-              </ReactFlow>
-            </div>
-          </ReactFlowProvider>
-        </div>
+        {/* React Flow 영역 */}
+        <ReactFlowProvider>
+          <FlowEditor
+            nodes={nodes}
+            edges={edges}
+            setNodes={setNodes}
+            setEdges={setEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            selectedNode={selectedNode}
+            selectedNodeData={selectedNodeData}
+            setSelectedNode={setSelectedNode}
+            setSelectedNodeData={setSelectedNodeData}
+            updateSelectedNodeData={updateSelectedNodeData}
+            deleteSelectedNode={deleteSelectedNode}
+          />
+        </ReactFlowProvider>
       </div>
     </div>
   )
