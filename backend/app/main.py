@@ -90,4 +90,14 @@ async def list_models(
             "data": []
         }
 
+# Add v1/models endpoint for compatibility (some TTS libraries might call this)
+@app.get("/v1/models", tags=["models"])
+async def list_models_v1(
+    current_user: CurrentUser,
+    session: SessionDep
+):
+    """V1 models endpoint for backward compatibility"""
+    # Delegate to the main models endpoint
+    return await list_models(current_user, session)
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
