@@ -2,9 +2,8 @@ from .users import User, UserCreate, UserUpdate, UserPublic
 from .ment import Ment, MentCreate, MentUpdate
 from .voice_actor import (
     VoiceActor, VoiceActorCreate, VoiceActorUpdate, VoiceActorPublic,
-    VoiceModel, VoiceModelCreate, VoiceModelUpdate, VoiceModelPublic,
     VoiceSample, VoiceSampleCreate, VoiceSamplePublic,
-    GenderType, AgeRangeType, ModelStatus
+    GenderType, AgeRangeType
 )
 from .tts import (
     TTSScript, TTSScriptCreate, TTSScriptUpdate, TTSScriptPublic,
@@ -38,9 +37,8 @@ __all__ = [
     "Ment", "MentCreate", "MentUpdate",
     # Voice Actors
     "VoiceActor", "VoiceActorCreate", "VoiceActorUpdate", "VoiceActorPublic",
-    "VoiceModel", "VoiceModelCreate", "VoiceModelUpdate", "VoiceModelPublic",
     "VoiceSample", "VoiceSampleCreate", "VoiceSamplePublic",
-    "GenderType", "AgeRangeType", "ModelStatus",
+    "GenderType", "AgeRangeType",
     # TTS
     "TTSScript", "TTSScriptCreate", "TTSScriptUpdate", "TTSScriptPublic",
     "TTSGeneration", "TTSGenerateRequest", "TTSGenerationPublic",

@@ -10,7 +10,7 @@ from typing import List
 from app.api.main import api_router
 from app.core.config import settings
 from app.api.deps import CurrentUser, SessionDep
-from app.models.voice_actor import VoiceModel
+from app.models.voice_actor import VoiceActor
 from sqlmodel import select
 
 # 로깅 설정
@@ -94,7 +94,7 @@ if settings.all_cors_origins:
         allow_headers=["*"],
     )
 
-# Add OpenAI-compatible models endpoint (outside of /api/v1 for compatibility)
+# Add OpenAI-compatible models endpoint (외부 라이브러리 호환성을 위해 유지)
 @app.get("/models", tags=["models"])
 async def list_models(
     current_user: CurrentUser,
@@ -102,21 +102,23 @@ async def list_models(
 ):
     """OpenAI-compatible models endpoint for TTS libraries"""
     try:
-        # Get all available voice models
-        statement = select(VoiceModel)
-        voice_models = session.exec(statement).all()
+        # 활성 성우들을 모델로 반환 (VoiceModel 대신 VoiceActor 사용)
+        statement = select(VoiceActor).where(VoiceActor.is_active == True)
+        voice_actors = session.exec(statement).all()
         
         # Format as OpenAI-compatible response
         models_data = []
-        for model in voice_models:
+        for actor in voice_actors:
             models_data.append({
-                "id": f"voice-model-{model.id}",
+                "id": f"voice-actor-{actor.id}",
                 "object": "model",
-                "created": int(model.created_at.timestamp()),
+                "created": int(actor.created_at.timestamp()),
                 "owned_by": "ars-system",
                 "permission": [],
-                "root": f"voice-model-{model.id}",
-                "parent": None
+                "root": f"voice-actor-{actor.id}",
+                "parent": None,
+                "name": actor.name,
+                "description": actor.description or f"{actor.name} 성우 음성"
             })
         
         return {
@@ -125,6 +127,7 @@ async def list_models(
         }
         
     except Exception as e:
+        logger.error(f"Error in /models endpoint: {e}")
         # Return empty list if there's an error
         return {
             "object": "list",
