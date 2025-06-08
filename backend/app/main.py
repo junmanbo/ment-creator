@@ -1,7 +1,9 @@
 import sentry_sdk
-from fastapi import FastAPI, APIRouter, Depends
+import logging
+from fastapi import FastAPI, APIRouter, Depends, Request
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -10,6 +12,29 @@ from app.core.config import settings
 from app.api.deps import CurrentUser, SessionDep
 from app.models.voice_actor import VoiceModel
 from sqlmodel import select
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # 요청 로깅
+        logger.info(f"🔍 Request: {request.method} {request.url.path} | Query: {request.url.query}")
+        
+        # 404 에러가 예상되는 요청 특별 로깅
+        if "/models" in request.url.path or "/v1/" in request.url.path:
+            logger.warning(f"⚠️  Models 관련 요청 감지: {request.method} {request.url.path}")
+            logger.warning(f"   전체 URL: {request.url}")
+            logger.warning(f"   Headers: {dict(request.headers)}")
+        
+        response = await call_next(request)
+        
+        # 404 응답 로깅
+        if response.status_code == 404:
+            logger.error(f"❌ 404 Not Found: {request.method} {request.url.path}")
+        
+        return response
 
 # Import all models to ensure proper SQLModel relationship initialization
 import app.models  # noqa: F401
@@ -42,6 +67,9 @@ app = FastAPI(
     generate_unique_id_function=custom_generate_unique_id,
     lifespan=lifespan,
 )
+
+# Add request logging middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:
