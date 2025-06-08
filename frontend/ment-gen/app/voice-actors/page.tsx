@@ -62,19 +62,7 @@ interface TTSGeneration {
   created_at: string
 }
 
-interface VoiceModel {
-  id: string
-  voice_actor_id: string
-  model_name: string
-  model_version: string
-  model_path: string
-  training_data_duration?: number
-  quality_score?: number
-  status: "training" | "ready" | "error" | "deprecated"
-  config?: any
-  created_at: string
-  updated_at: string
-}
+
 
 interface TTSLibraryItem {
   id: string
@@ -126,17 +114,7 @@ export default function VoiceActorsPage() {
   const [sampleText, setSampleText] = useState("")
   const [sampleFile, setSampleFile] = useState<File | null>(null)
   
-  // 음성 모델 상태
-  const [voiceModels, setVoiceModels] = useState<VoiceModel[]>([])
-  const [isModelsLoading, setIsModelsLoading] = useState(false)
-  const [isCreateModelDialogOpen, setIsCreateModelDialogOpen] = useState(false)
-  const [newModel, setNewModel] = useState({
-    voice_actor_id: "",
-    model_name: "",
-    model_version: "1.0",
-    config: {}
-  })
-  const [trainingModels, setTrainingModels] = useState<Set<string>>(new Set())
+
   
   // TTS 라이브러리 상태
   const [libraryItems, setLibraryItems] = useState<TTSLibraryItem[]>([])
@@ -161,9 +139,7 @@ export default function VoiceActorsPage() {
   }, [])
   
   useEffect(() => {
-    if (activeTab === "models") {
-      fetchVoiceModels()
-    } else if (activeTab === "library") {
+    if (activeTab === "library") {
       fetchLibraryItems()
       fetchLibraryCategories()
     }
@@ -221,290 +197,15 @@ export default function VoiceActorsPage() {
     }
   }
 
-  const fetchVoiceModels = async () => {
-    setIsModelsLoading(true)
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
 
-      if (response.ok) {
-        const data = await response.json()
-        setVoiceModels(data)
-      } else {
-        toast({
-          title: "모델 로드 실패",
-          description: "음성 모델 목록을 불러오는데 실패했습니다.",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Fetch voice models error:", error)
-      toast({
-        title: "네트워크 오류",
-        description: "서버와의 연결에 문제가 있습니다.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsModelsLoading(false)
-    }
-  }
 
-  const createVoiceModel = async () => {
-    console.log(`🎯 Starting voice model creation`)
-    console.log(`📝 Model data:`, newModel)
-    
-    try {
-      if (!newModel.voice_actor_id || !newModel.model_name.trim()) {
-        console.warn(`⚠️ Validation failed: voice_actor_id=${newModel.voice_actor_id}, model_name='${newModel.model_name}'`)
-        toast({
-          title: "입력 오류",
-          description: "성우와 모델명을 입력해주세요.",
-          variant: "destructive",
-        })
-        return
-      }
-      
-      const accessToken = localStorage.getItem("access_token")
-      console.log(`🔑 Access token exists: ${!!accessToken}`)
-      
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models`
-      console.log(`📡 Making request to: ${url}`)
-      console.log(`📝 Request body:`, newModel)
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(newModel),
-      })
-      
-      console.log(`📨 Response status: ${response.status}`)
-      console.log(`📨 Response headers:`, Object.fromEntries(response.headers.entries()))
 
-      if (response.ok) {
-        const createdModel = await response.json()
-        console.log(`✅ Model created successfully:`, createdModel)
-        
-        setVoiceModels([createdModel, ...voiceModels])
-        setIsCreateModelDialogOpen(false)
-        setNewModel({
-          voice_actor_id: "",
-          model_name: "",
-          model_version: "1.0",
-          config: {}
-        })
-        
-        toast({
-          title: "모델 생성 성공",
-          description: "새로운 음성 모델이 생성되었습니다.",
-        })
-        
-        // 생성 후 자동으로 학습 시작 여부 확인
-        const shouldStartTraining = confirm("모델이 생성되었습니다. 지금 학습을 시작하시겠습니까?")
-        if (shouldStartTraining) {
-          console.log(`🎯 Auto-starting training for newly created model: ${createdModel.id}`)
-          await trainVoiceModel(createdModel.id)
-        }
-        
-      } else {
-        const errorText = await response.text()
-        console.error(`❌ Model creation failed with status ${response.status}:`, errorText)
-        
-        let errorData
-        try {
-          errorData = JSON.parse(errorText)
-        } catch {
-          errorData = { detail: errorText || "모델 생성 실패" }
-        }
-        
-        throw new Error(errorData.detail || "모델 생성 실패")
-      }
-    } catch (error) {
-      console.error(`💥 Model creation failed:`, error)
-      console.error(`💥 Error type:`, typeof error)
-      console.error(`💥 Error message:`, error instanceof Error ? error.message : String(error))
-      
-      toast({
-        title: "모델 생성 실패",
-        description: error instanceof Error ? error.message : "음성 모델 생성 중 오류가 발생했습니다.",
-        variant: "destructive",
-      })
-    }
-  }
 
-  const trainVoiceModel = async (modelId: string) => {
-    console.log(`🎯 Starting voice model training for model ID: ${modelId}`)
-    console.log(`🌐 API Base URL: ${process.env.NEXT_PUBLIC_API_BASE_URL}`)
-    
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      console.log(`🔑 Access token exists: ${!!accessToken}`)
-      console.log(`🔑 Token preview: ${accessToken?.substring(0, 20)}...`)
-      
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models/${modelId}/train`
-      console.log(`📡 Making request to: ${url}`)
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      })
-      
-      console.log(`📨 Response status: ${response.status}`)
-      console.log(`📨 Response headers:`, Object.fromEntries(response.headers.entries()))
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log(`✅ Training started successfully:`, result)
-        
-        // 학습 중인 모델로 표시
-        setTrainingModels(prev => new Set([...prev, modelId]))
-        
-        // 모델 상태 업데이트
-        setVoiceModels(prev => 
-          prev.map(model => 
-            model.id === modelId 
-              ? { ...model, status: "training" as const }
-              : model
-          )
-        )
-        
-        toast({
-          title: "모델 학습 시작",
-          description: result.message || "음성 모델 학습이 시작되었습니다.",
-        })
-        
-        // 학습 상태 폴링 시작
-        pollModelTrainingStatus(modelId)
-        
-      } else {
-        const errorText = await response.text()
-        console.error(`❌ Request failed with status ${response.status}:`, errorText)
-        
-        let errorData
-        try {
-          errorData = JSON.parse(errorText)
-        } catch {
-          errorData = { detail: errorText || "알 수 없는 오류가 발생했습니다." }
-        }
-        
-        throw new Error(errorData.detail || "모델 학습 시작 실패")
-      }
-    } catch (error) {
-      console.error(`💥 Training request failed:`, error)
-      console.error(`💥 Error type:`, typeof error)
-      console.error(`💥 Error message:`, error instanceof Error ? error.message : String(error))
-      
-      toast({
-        title: "학습 시작 실패",
-        description: error instanceof Error ? error.message : "모델 학습 시작 중 오류가 발생했습니다.",
-        variant: "destructive",
-      })
-    }
-  }
 
-  const pollModelTrainingStatus = async (modelId: string) => {
-    const accessToken = localStorage.getItem("access_token")
-    
-    const poll = async () => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models/${modelId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          }
-        )
 
-        if (response.ok) {
-          const model = await response.json()
-          
-          // 모델 상태 업데이트
-          setVoiceModels(prev => 
-            prev.map(m => m.id === modelId ? model : m)
-          )
 
-          if (model.status === "ready") {
-            setTrainingModels(prev => {
-              const newSet = new Set(prev)
-              newSet.delete(modelId)
-              return newSet
-            })
-            toast({
-              title: "모델 학습 완료",
-              description: "음성 모델 학습이 성공적으로 완료되었습니다.",
-            })
-          } else if (model.status === "error") {
-            setTrainingModels(prev => {
-              const newSet = new Set(prev)
-              newSet.delete(modelId)
-              return newSet
-            })
-            toast({
-              title: "모델 학습 실패",
-              description: "음성 모델 학습에 실패했습니다.",
-              variant: "destructive",
-            })
-          } else if (model.status === "training") {
-            // 3초 후 다시 폴링
-            setTimeout(poll, 3000)
-          }
-        }
-      } catch (error) {
-        console.error("Poll model training status error:", error)
-      }
-    }
 
-    poll()
-  }
-
-  const deleteVoiceModel = async (modelId: string) => {
-    if (!confirm("정말로 이 모델을 삭제하시겠습니까?")) {
-      return
-    }
-
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models/${modelId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      if (response.ok) {
-        setVoiceModels(prev => prev.filter(model => model.id !== modelId))
-        toast({
-          title: "모델 삭제 성공",
-          description: "음성 모델이 삭제되었습니다.",
-        })
-      } else {
-        throw new Error("모델 삭제 실패")
-      }
-    } catch (error) {
-      console.error("Delete voice model error:", error)
-      toast({
-        title: "삭제 실패",
-        description: "모델 삭제 중 오류가 발생했습니다.",
-        variant: "destructive",
-      })
-    }
-  }
 
   const createVoiceActor = async () => {
     try {
@@ -1023,7 +724,6 @@ export default function VoiceActorsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">
           <TabsTrigger value="actors">성우 관리</TabsTrigger>
-          <TabsTrigger value="models">음성 모델 관리</TabsTrigger>
           <TabsTrigger value="tts">TTS 생성</TabsTrigger>
           <TabsTrigger value="library">음성 라이브러리</TabsTrigger>
         </TabsList>
@@ -1163,184 +863,7 @@ export default function VoiceActorsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="models">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>음성 모델 관리</CardTitle>
-                  <Dialog open={isCreateModelDialogOpen} onOpenChange={setIsCreateModelDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <Plus className="h-4 w-4 mr-2" />
-                        새 모델 생성
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>새 음성 모델 생성</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="model-voice-actor">성우 선택</Label>
-                          <Select 
-                            value={newModel.voice_actor_id} 
-                            onValueChange={(value) => setNewModel({...newModel, voice_actor_id: value})}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="성우를 선택하세요" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {voiceActors.filter(actor => actor.is_active).map((actor) => (
-                                <SelectItem key={actor.id} value={actor.id}>
-                                  {actor.name} ({actor.gender === "male" ? "남성" : actor.gender === "female" ? "여성" : "중성"}, {actor.age_range})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="model-name">모델명</Label>
-                          <Input
-                            id="model-name"
-                            value={newModel.model_name}
-                            onChange={(e) => setNewModel({...newModel, model_name: e.target.value})}
-                            placeholder="모델 이름을 입력하세요"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="model-version">모델 버전</Label>
-                          <Input
-                            id="model-version"
-                            value={newModel.model_version}
-                            onChange={(e) => setNewModel({...newModel, model_version: e.target.value})}
-                            placeholder="예: 1.0, 2.1"
-                          />
-                        </div>
-                        
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="outline" onClick={() => setIsCreateModelDialogOpen(false)}>
-                            취소
-                          </Button>
-                          <Button onClick={createVoiceModel}>생성</Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-            </Card>
-            
-            {/* 모델 목록 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {isModelsLoading ? (
-                <div className="col-span-3 flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <span className="ml-2">모델 목록을 불러오는 중...</span>
-                </div>
-              ) : voiceModels.length === 0 ? (
-                <div className="col-span-3 text-center py-8 text-gray-500">
-                  등록된 음성 모델이 없습니다.
-                </div>
-              ) : (
-                voiceModels.map((model) => {
-                  const voiceActor = voiceActors.find(actor => actor.id === model.voice_actor_id)
-                  return (
-                    <Card key={model.id} className="hover:shadow-md transition-shadow">
-                      <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start">
-                          <CardTitle className="text-base line-clamp-1">{model.model_name}</CardTitle>
-                          <Badge className={`text-xs ${
-                            model.status === "ready" ? "bg-green-100 text-green-800" :
-                            model.status === "training" ? "bg-yellow-100 text-yellow-800" :
-                            model.status === "error" ? "bg-red-100 text-red-800" :
-                            "bg-gray-100 text-gray-800"
-                          }`}>
-                            {model.status === "ready" ? "준비완료" :
-                             model.status === "training" ? "학습중" :
-                             model.status === "error" ? "오류" : "비활성"}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="text-sm">
-                          <p><strong>성우:</strong> {voiceActor?.name || "알 수 없음"}</p>
-                          <p><strong>버전:</strong> {model.model_version}</p>
-                          {model.quality_score && (
-                            <p><strong>품질 점수:</strong> {model.quality_score.toFixed(1)}점</p>
-                          )}
-                          {model.training_data_duration && (
-                            <p><strong>학습 데이터:</strong> {Math.floor(model.training_data_duration / 60)}분 {model.training_data_duration % 60}초</p>
-                          )}
-                        </div>
-                        
-                        <div className="flex justify-between items-center text-xs text-gray-500">
-                          <span>생성일: {new Date(model.created_at).toLocaleDateString()}</span>
-                          <span>수정일: {new Date(model.updated_at).toLocaleDateString()}</span>
-                        </div>
-                        
-                        <div className="flex space-x-2">
-                          {model.status === "ready" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => trainVoiceModel(model.id)}
-                              disabled={trainingModels.has(model.id)}
-                            >
-                              {trainingModels.has(model.id) ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                  재학습 중
-                                </>
-                              ) : (
-                                <>
-                                  <Settings className="h-4 w-4 mr-1" />
-                                  재학습
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          
-                          {(model.status === "training" || model.status === "error") && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => trainVoiceModel(model.id)}
-                              disabled={model.status === "training"}
-                            >
-                              {model.status === "training" ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                  학습 중
-                                </>
-                              ) : (
-                                <>
-                                  <Settings className="h-4 w-4 mr-1" />
-                                  다시 학습
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => deleteVoiceModel(model.id)}
-                            disabled={model.status === "training"}
-                          >
-                            삭제
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </TabsContent>
+
 
         <TabsContent value="tts">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
