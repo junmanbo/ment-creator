@@ -257,8 +257,12 @@ export default function VoiceActorsPage() {
   }
 
   const createVoiceModel = async () => {
+    console.log(`🎯 Starting voice model creation`)
+    console.log(`📝 Model data:`, newModel)
+    
     try {
       if (!newModel.voice_actor_id || !newModel.model_name.trim()) {
+        console.warn(`⚠️ Validation failed: voice_actor_id=${newModel.voice_actor_id}, model_name='${newModel.model_name}'`)
         toast({
           title: "입력 오류",
           description: "성우와 모델명을 입력해주세요.",
@@ -266,22 +270,30 @@ export default function VoiceActorsPage() {
         })
         return
       }
-
+      
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(newModel),
-        }
-      )
+      console.log(`🔑 Access token exists: ${!!accessToken}`)
+      
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models`
+      console.log(`📡 Making request to: ${url}`)
+      console.log(`📝 Request body:`, newModel)
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(newModel),
+      })
+      
+      console.log(`📨 Response status: ${response.status}`)
+      console.log(`📨 Response headers:`, Object.fromEntries(response.headers.entries()))
 
       if (response.ok) {
         const createdModel = await response.json()
+        console.log(`✅ Model created successfully:`, createdModel)
+        
         setVoiceModels([createdModel, ...voiceModels])
         setIsCreateModelDialogOpen(false)
         setNewModel({
@@ -290,16 +302,37 @@ export default function VoiceActorsPage() {
           model_version: "1.0",
           config: {}
         })
+        
         toast({
           title: "모델 생성 성공",
           description: "새로운 음성 모델이 생성되었습니다.",
         })
+        
+        // 생성 후 자동으로 학습 시작 여부 확인
+        const shouldStartTraining = confirm("모델이 생성되었습니다. 지금 학습을 시작하시겠습니까?")
+        if (shouldStartTraining) {
+          console.log(`🎯 Auto-starting training for newly created model: ${createdModel.id}`)
+          await trainVoiceModel(createdModel.id)
+        }
+        
       } else {
-        const errorData = await response.json()
+        const errorText = await response.text()
+        console.error(`❌ Model creation failed with status ${response.status}:`, errorText)
+        
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          errorData = { detail: errorText || "모델 생성 실패" }
+        }
+        
         throw new Error(errorData.detail || "모델 생성 실패")
       }
     } catch (error) {
-      console.error("Create voice model error:", error)
+      console.error(`💥 Model creation failed:`, error)
+      console.error(`💥 Error type:`, typeof error)
+      console.error(`💥 Error message:`, error instanceof Error ? error.message : String(error))
+      
       toast({
         title: "모델 생성 실패",
         description: error instanceof Error ? error.message : "음성 모델 생성 중 오류가 발생했습니다.",
@@ -309,20 +342,31 @@ export default function VoiceActorsPage() {
   }
 
   const trainVoiceModel = async (modelId: string) => {
+    console.log(`🎯 Starting voice model training for model ID: ${modelId}`)
+    console.log(`🌐 API Base URL: ${process.env.NEXT_PUBLIC_API_BASE_URL}`)
+    
     try {
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models/${modelId}/train`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
+      console.log(`🔑 Access token exists: ${!!accessToken}`)
+      console.log(`🔑 Token preview: ${accessToken?.substring(0, 20)}...`)
+      
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/models/${modelId}/train`
+      console.log(`📡 Making request to: ${url}`)
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      })
+      
+      console.log(`📨 Response status: ${response.status}`)
+      console.log(`📨 Response headers:`, Object.fromEntries(response.headers.entries()))
 
       if (response.ok) {
         const result = await response.json()
+        console.log(`✅ Training started successfully:`, result)
         
         // 학습 중인 모델로 표시
         setTrainingModels(prev => new Set([...prev, modelId]))
@@ -345,11 +389,23 @@ export default function VoiceActorsPage() {
         pollModelTrainingStatus(modelId)
         
       } else {
-        const errorData = await response.json()
+        const errorText = await response.text()
+        console.error(`❌ Request failed with status ${response.status}:`, errorText)
+        
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          errorData = { detail: errorText || "알 수 없는 오류가 발생했습니다." }
+        }
+        
         throw new Error(errorData.detail || "모델 학습 시작 실패")
       }
     } catch (error) {
-      console.error("Train voice model error:", error)
+      console.error(`💥 Training request failed:`, error)
+      console.error(`💥 Error type:`, typeof error)
+      console.error(`💥 Error message:`, error instanceof Error ? error.message : String(error))
+      
       toast({
         title: "학습 시작 실패",
         description: error instanceof Error ? error.message : "모델 학습 시작 중 오류가 발생했습니다.",

@@ -852,23 +852,33 @@ async def train_voice_model(
     background_tasks: BackgroundTasks
 ):
     """음성 모델 학습 시작"""
+    logger.info(f"🎯 Train voice model API called for model_id: {model_id} by user: {current_user.id}")
+    
     voice_model = session.get(VoiceModel, model_id)
     if not voice_model:
+        logger.error(f"❌ Voice model {model_id} not found")
         raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
     
+    logger.info(f"📋 Found voice model: {voice_model.model_name} (status: {voice_model.status})")
+
     if voice_model.status == ModelStatus.TRAINING:
+        logger.warning(f"⚠️ Model {model_id} is already training")
         raise HTTPException(status_code=400, detail="이미 학습 중인 모델입니다.")
-    
+
     # 성우의 음성 샘플 확인
-    samples_count = session.exec(
-        select(VoiceSample).where(VoiceSample.voice_actor_id == voice_model.voice_actor_id)
-    ).all()
+    samples_query = select(VoiceSample).where(VoiceSample.voice_actor_id == voice_model.voice_actor_id)
+    samples_count = session.exec(samples_query).all()
     
-    if len(samples_count) < 3:
+    logger.info(f"🎤 Found {len(samples_count)} voice samples for voice actor {voice_model.voice_actor_id}")
+
+    if len(samples_count) < 1:  # 최소 1개로 완화
+        logger.error(f"❌ Insufficient voice samples: {len(samples_count)} found, minimum 1 required")
         raise HTTPException(
             status_code=400, 
-            detail="모델 학습을 위해서는 최소 3개의 음성 샘플이 필요합니다."
+            detail=f"모델 학습을 위해서는 최소 1개의 음성 샘플이 필요합니다. 현재: {len(samples_count)}개"
         )
+
+    logger.info(f"✅ Voice samples validation passed. Starting training process...")
     
     # 모델 상태를 학습 중으로 변경
     voice_model.status = ModelStatus.TRAINING
@@ -876,16 +886,24 @@ async def train_voice_model(
     session.add(voice_model)
     session.commit()
     
-    # 백그라운드에서 모델 학습 시작 (실제 구현은 tts_service에서)
+    logger.info(f"🔄 Model status updated to TRAINING")
+
+    # 백그라운드에서 모델 학습 시작
+    logger.info(f"🚀 Adding background task for model training")
     background_tasks.add_task(
         tts_service.train_voice_model,
         model_id
     )
     
+    logger.info(f"✅ Training task added successfully")
+
     return {
         "message": "음성 모델 학습이 시작되었습니다.",
         "model_id": model_id,
-        "status": "training"
+        "status": "training",
+        "voice_actor_id": voice_model.voice_actor_id,
+        "model_name": voice_model.model_name,
+        "samples_count": len(samples_count)
     }
 
 # === TTS 라이브러리 관리 ===
@@ -1086,3 +1104,22 @@ def get_tts_library_categories(
     
     categories = session.exec(statement).all()
     return [cat for cat in categories if cat]  # None 값 제거
+
+# === 테스트 및 디버깅 엔드포인트 ===
+
+@router.get("/api-test")
+def test_voice_actors_api():
+    """성우 API 기본 연결 테스트"""
+    logger.info("🧪 Voice actors API test endpoint called")
+    return {
+        "message": "Voice actors API is working perfectly!", 
+        "timestamp": datetime.now().isoformat(),
+        "status": "healthy",
+        "endpoints": {
+            "voice_actors": "/voice-actors",
+            "models": "/voice-actors/models",
+            "train_model": "/voice-actors/models/{model_id}/train",
+            "debug_diagnosis": "/voice-actors/debug/diagnosis",
+            "debug_fix": "/voice-actors/debug/fix-issues"
+        }
+    }
