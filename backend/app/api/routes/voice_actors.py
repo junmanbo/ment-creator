@@ -1,6 +1,5 @@
 import uuid
 import logging
-import traceback
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
@@ -15,9 +14,8 @@ from sqlmodel import select
 from app.api.deps import CurrentUser, SessionDep
 from app.models.voice_actor import (
     VoiceActor, VoiceActorCreate, VoiceActorUpdate, VoiceActorPublic,
-    VoiceModel, VoiceModelCreate, VoiceModelUpdate, VoiceModelPublic,
     VoiceSample, VoiceSampleCreate, VoiceSamplePublic,
-    GenderType, AgeRangeType, ModelStatus
+    GenderType, AgeRangeType
 )
 from app.models.tts import (
     TTSScript, TTSScriptCreate, TTSScriptPublic, 
@@ -50,7 +48,7 @@ def create_voice_actor(
     session: SessionDep,
     voice_actor_in: VoiceActorCreate,
     current_user: CurrentUser
-) -> VoiceActor:
+) -> VoiceActorPublic:
     """새 성우 등록"""
     voice_actor = VoiceActor(
         **voice_actor_in.model_dump(),
@@ -59,7 +57,12 @@ def create_voice_actor(
     session.add(voice_actor)
     session.commit()
     session.refresh(voice_actor)
-    return voice_actor
+    
+    try:
+        return VoiceActorPublic.model_validate(voice_actor)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert new voice actor {voice_actor.id}: {e}")
+        raise HTTPException(status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다.")
 
 @router.get("/", response_model=List[VoiceActorPublic])
 def get_voice_actors(
@@ -72,23 +75,44 @@ def get_voice_actors(
     age_range: Optional[AgeRangeType] = None,
     language: Optional[str] = None,
     is_active: Optional[bool] = None
-) -> List[VoiceActor]:
+) -> List[VoiceActorPublic]:
     """성우 목록 조회"""
-    statement = select(VoiceActor)
+    logger.info(f"🎯 GET /voice-actors called with filters: gender={gender}, age_range={age_range}, language={language}, is_active={is_active}")
     
-    # 필터 적용
-    if gender:
-        statement = statement.where(VoiceActor.gender == gender)
-    if age_range:
-        statement = statement.where(VoiceActor.age_range == age_range)
-    if language:
-        statement = statement.where(VoiceActor.language == language)
-    if is_active is not None:
-        statement = statement.where(VoiceActor.is_active == is_active)
-    
-    statement = statement.offset(skip).limit(limit)
-    voice_actors = session.exec(statement).all()
-    return voice_actors
+    try:
+        statement = select(VoiceActor)
+        
+        # 필터 적용
+        if gender:
+            statement = statement.where(VoiceActor.gender == gender)
+        if age_range:
+            statement = statement.where(VoiceActor.age_range == age_range)
+        if language:
+            statement = statement.where(VoiceActor.language == language)
+        if is_active is not None:
+            statement = statement.where(VoiceActor.is_active == is_active)
+        
+        statement = statement.offset(skip).limit(limit)
+        voice_actors = session.exec(statement).all()
+        
+        logger.info(f"📊 Found {len(voice_actors)} voice actors")
+        
+        # VoiceActor 객체들을 VoiceActorPublic으로 변환
+        public_actors = []
+        for actor in voice_actors:
+            try:
+                public_actor = VoiceActorPublic.model_validate(actor)
+                public_actors.append(public_actor)
+            except Exception as e:
+                logger.error(f"❌ Failed to convert voice actor {actor.id}: {e}")
+                continue
+        
+        logger.info(f"✅ Successfully converted {len(public_actors)} out of {len(voice_actors)} voice actors")
+        return public_actors
+        
+    except Exception as e:
+        logger.error(f"💥 ERROR in get_voice_actors: {e}")
+        raise HTTPException(status_code=500, detail=f"성우 목록 조회 중 오류: {str(e)}")
 
 @router.get("/{voice_actor_id}", response_model=VoiceActorPublic)
 def get_voice_actor(
@@ -96,12 +120,17 @@ def get_voice_actor(
     session: SessionDep,
     voice_actor_id: uuid.UUID,
     current_user: CurrentUser
-) -> VoiceActor:
+) -> VoiceActorPublic:
     """특정 성우 조회"""
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    return voice_actor
+    
+    try:
+        return VoiceActorPublic.model_validate(voice_actor)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert voice actor {voice_actor_id}: {e}")
+        raise HTTPException(status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다.")
 
 @router.put("/{voice_actor_id}", response_model=VoiceActorPublic)
 def update_voice_actor(
@@ -110,7 +139,7 @@ def update_voice_actor(
     voice_actor_id: uuid.UUID,
     voice_actor_in: VoiceActorUpdate,
     current_user: CurrentUser
-) -> VoiceActor:
+) -> VoiceActorPublic:
     """성우 정보 수정"""
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
@@ -122,7 +151,12 @@ def update_voice_actor(
     session.add(voice_actor)
     session.commit()
     session.refresh(voice_actor)
-    return voice_actor
+    
+    try:
+        return VoiceActorPublic.model_validate(voice_actor)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert updated voice actor {voice_actor_id}: {e}")
+        raise HTTPException(status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다.")
 
 @router.delete("/{voice_actor_id}")
 def delete_voice_actor(
@@ -152,7 +186,7 @@ async def upload_voice_sample(
     current_user: CurrentUser,
     audio_file: UploadFile = File(...),
     text_content: str = Form(...)
-):
+) -> VoiceSamplePublic:
     """음성 샘플 업로드"""
     # 성우 존재 확인
     voice_actor = session.get(VoiceActor, voice_actor_id)
@@ -189,7 +223,11 @@ async def upload_voice_sample(
     session.commit()
     session.refresh(voice_sample)
     
-    return voice_sample
+    try:
+        return VoiceSamplePublic.model_validate(voice_sample)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert uploaded voice sample {voice_sample.id}: {e}")
+        raise HTTPException(status_code=500, detail="음성 샘플 데이터 변환 중 오류가 발생했습니다.")
 
 @router.get("/{voice_actor_id}/samples", response_model=List[VoiceSamplePublic])
 def get_voice_samples(
@@ -197,11 +235,32 @@ def get_voice_samples(
     session: SessionDep,
     voice_actor_id: uuid.UUID,
     current_user: CurrentUser
-) -> List[VoiceSample]:
+) -> List[VoiceSamplePublic]:
     """성우 음성 샘플 목록"""
-    statement = select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
-    samples = session.exec(statement).all()
-    return samples
+    logger.info(f"🎯 GET /voice-actors/{voice_actor_id}/samples called")
+    
+    try:
+        statement = select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
+        samples = session.exec(statement).all()
+        
+        logger.info(f"📊 Found {len(samples)} voice samples")
+        
+        # VoiceSample 객체들을 VoiceSamplePublic으로 변환
+        public_samples = []
+        for sample in samples:
+            try:
+                public_sample = VoiceSamplePublic.model_validate(sample)
+                public_samples.append(public_sample)
+            except Exception as e:
+                logger.error(f"❌ Failed to convert voice sample {sample.id}: {e}")
+                continue
+        
+        logger.info(f"✅ Successfully converted {len(public_samples)} out of {len(samples)} voice samples")
+        return public_samples
+        
+    except Exception as e:
+        logger.error(f"💥 ERROR in get_voice_samples: {e}")
+        raise HTTPException(status_code=500, detail=f"음성 샘플 목록 조회 중 오류: {str(e)}")
 
 @router.get("/{voice_actor_id}/samples/{sample_id}/audio")
 def stream_voice_sample(
@@ -235,7 +294,7 @@ def create_tts_script(
     session: SessionDep,
     script_in: TTSScriptCreate,
     current_user: CurrentUser
-) -> TTSScript:
+) -> TTSScriptPublic:
     """TTS 스크립트 생성"""
     # 성우 존재 확인
     if script_in.voice_actor_id:
@@ -250,7 +309,12 @@ def create_tts_script(
     session.add(script)
     session.commit()
     session.refresh(script)
-    return script
+    
+    try:
+        return TTSScriptPublic.model_validate(script)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert TTS script {script.id}: {e}")
+        raise HTTPException(status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다.")
 
 @router.post("/tts-scripts/{script_id}/generate", response_model=TTSGenerationPublic)
 async def generate_tts(
@@ -260,7 +324,7 @@ async def generate_tts(
     generate_request: TTSGenerateRequest,
     current_user: CurrentUser,
     background_tasks: BackgroundTasks
-) -> TTSGeneration:
+) -> TTSGenerationPublic:
     """TTS 생성 요청"""
     # 스크립트 확인
     script = session.get(TTSScript, script_id)
@@ -270,7 +334,6 @@ async def generate_tts(
     # 생성 작업 생성
     generation = TTSGeneration(
         script_id=script_id,
-        voice_model_id=generate_request.voice_model_id,
         generation_params=generate_request.generation_params,
         requested_by=current_user.id
     )
@@ -285,7 +348,11 @@ async def generate_tts(
         generation.id
     )
     
-    return generation
+    try:
+        return TTSGenerationPublic.model_validate(generation)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert TTS generation {generation.id}: {e}")
+        raise HTTPException(status_code=500, detail="TTS 생성 데이터 변환 중 오류가 발생했습니다.")
 
 @router.get("/tts-generations/{generation_id}", response_model=TTSGenerationPublic)
 def get_tts_generation(
@@ -509,7 +576,7 @@ async def diagnose_tts_environment(
     *,
     current_user: CurrentUser
 ):
-    """TTS 환경 전체 진단 - Voice Model 생성 문제 해결용"""
+    """TTS 환경 전체 진단"""
     logger.info(f"TTS diagnosis requested by user {current_user.id}")
     
     try:
@@ -546,494 +613,6 @@ async def fix_common_tts_issues(
             "message": "TTS 문제 자동 수정 실패",
             "error": str(e)
         }
-
-@router.post("/models/{model_id}/debug-train")
-async def debug_train_voice_model(
-    *,
-    session: SessionDep,
-    model_id: uuid.UUID,
-    current_user: CurrentUser
-):
-    """음성 모델 학습 디버그 모드 (동기 실행으로 오류 확인)"""
-    voice_model = session.get(VoiceModel, model_id)
-    if not voice_model:
-        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
-    
-    logger.info(f"Debug training started for model {model_id} by user {current_user.id}")
-    
-    try:
-        # 동기 실행으로 오류 즉시 확인
-        await tts_service.train_voice_model(model_id)
-        
-        # 결과 확인
-        session.refresh(voice_model)
-        
-        return {
-            "message": "디버그 모드 학습 완료",
-            "model_id": str(model_id),
-            "status": voice_model.status,
-            "quality_score": voice_model.quality_score,
-            "config": voice_model.config
-        }
-        
-    except Exception as e:
-        logger.error(f"Debug training failed for model {model_id}: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        # 모델 상태를 에러로 업데이트
-        voice_model.status = ModelStatus.ERROR
-        voice_model.config = {
-            "error_message": str(e),
-            "error_type": type(e).__name__,
-            "error_occurred_at": datetime.now().isoformat()
-        }
-        session.add(voice_model)
-        session.commit()
-        
-        return {
-            "message": "디버그 모드 학습 실패",
-            "model_id": str(model_id),
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "status": "error"
-        }
-
-# === 음성 모델 관리 ===
-
-# 🔥 중요: 구체적인 경로를 먼저 정의해야 함!
-# /models 가 /{voice_actor_id}/models 보다 먼저 와야 FastAPI 라우팅이 정상 작동
-
-# 필터링을 위한 별도 엔드포인트 추가
-@router.get("/models/filter", response_model=List[VoiceModelPublic])
-def get_voice_models_with_filter(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 20,
-    voice_actor_id: Optional[str] = None,
-    status: Optional[str] = None
-) -> List[VoiceModel]:
-    """필터링 옵션을 포함한 음성 모델 목록 조회"""
-    logger.info(f"get_voice_models_with_filter called with: skip={skip}, limit={limit}, voice_actor_id={voice_actor_id}, status={status}")
-    
-    try:
-        statement = select(VoiceModel)
-        
-        # 성우 ID 필터 적용
-        if voice_actor_id:
-            try:
-                parsed_voice_actor_id = uuid.UUID(voice_actor_id)
-                statement = statement.where(VoiceModel.voice_actor_id == parsed_voice_actor_id)
-                logger.info(f"Filtering by voice_actor_id: {parsed_voice_actor_id}")
-            except ValueError:
-                logger.warning(f"Invalid voice_actor_id format: {voice_actor_id}, ignoring filter")
-        
-        # 상태 필터 적용
-        if status:
-            try:
-                parsed_status = ModelStatus(status)
-                statement = statement.where(VoiceModel.status == parsed_status)
-                logger.info(f"Filtering by status: {parsed_status}")
-            except ValueError:
-                logger.warning(f"Invalid status value: {status}, ignoring filter")
-        
-        statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
-        voice_models = session.exec(statement).all()
-        
-        logger.info(f"Found {len(voice_models)} voice models with filters")
-        return voice_models
-        
-    except Exception as e:
-        logger.error(f"Error in get_voice_models_with_filter: {e}")
-        raise HTTPException(status_code=500, detail=f"음성 모델 조회 중 오류: {str(e)}")
-
-# 🐛 디버깅용 엔드포인트 추가
-@router.get("/debug/routes")
-def debug_routes_info(*, current_user: CurrentUser):
-    """라우터 매칭 디버깅용 엔드포인트"""
-    logger.info(f"🔍 Debug routes endpoint called by user {current_user.id}")
-    
-    return {
-        "message": "Route debugging info",
-        "current_user_id": str(current_user.id),
-        "available_routes": [
-            "GET /voice-actors/models/filter",
-            "GET /voice-actors/models/debug", 
-            "GET /voice-actors/models",
-            "POST /voice-actors/models",
-            "GET /voice-actors/models/{model_id}",
-            "PUT /voice-actors/models/{model_id}",
-            "DELETE /voice-actors/models/{model_id}",
-            "POST /voice-actors/models/{model_id}/train",
-            "POST /voice-actors/{voice_actor_id}/models (Legacy)"
-        ],
-        "this_route_matched": "GET /voice-actors/debug/routes"
-    }
-
-@router.get("/models/debug")
-def debug_voice_models_api(*, current_user: CurrentUser, session: SessionDep):
-    """모델 API 디버깅 엔드포인트"""
-    logger.info("Debug voice models API called")
-    
-    try:
-        # 1. 기본 정보 반환
-        result = {
-            "message": "Voice models debug API is working",
-            "timestamp": datetime.now().isoformat(),
-            "user_id": str(current_user.id)
-        }
-        
-        # 2. 데이터베이스 연결 테스트
-        try:
-            count_result = session.exec(select(VoiceModel))
-            models = count_result.all()
-            result["voice_models_count"] = len(models)
-            result["voice_models"] = [
-                {
-                    "id": str(model.id),
-                    "model_name": model.model_name,
-                    "status": model.status,
-                    "voice_actor_id": str(model.voice_actor_id)
-                } for model in models[:3]  # 처음 3개만
-            ]
-        except Exception as db_error:
-            result["database_error"] = str(db_error)
-            result["voice_models_count"] = -1
-        
-        # 3. 성우 개수 확인
-        try:
-            actors_result = session.exec(select(VoiceActor))
-            actors = actors_result.all()
-            result["voice_actors_count"] = len(actors)
-        except Exception as actors_error:
-            result["voice_actors_error"] = str(actors_error)
-            result["voice_actors_count"] = -1
-            
-        return result
-        
-    except Exception as e:
-        logger.error(f"Debug API error: {e}")
-        return {
-            "message": "Debug API error",
-            "error": str(e),
-            "error_type": str(type(e))
-        }
-
-@router.post("/models", response_model=VoiceModelPublic)
-def create_voice_model(
-    *,
-    session: SessionDep,
-    model_in: VoiceModelCreate,
-    current_user: CurrentUser
-) -> VoiceModel:
-    """새 음성 모델 생성"""
-    logger.info(f"Creating voice model: {model_in.model_dump()}")
-    
-    # 성우 존재 확인
-    voice_actor = session.get(VoiceActor, model_in.voice_actor_id)
-    if not voice_actor:
-        logger.error(f"Voice actor {model_in.voice_actor_id} not found")
-        raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
-    logger.info(f"Found voice actor: {voice_actor.name}")
-    
-    # 모델 경로 생성
-    model_dir = Path("voice_models") / str(model_in.voice_actor_id)
-    model_dir.mkdir(parents=True, exist_ok=True)
-    
-    model_filename = f"{model_in.model_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.pth"
-    model_path = model_dir / model_filename
-    
-    logger.info(f"Model will be saved to: {model_path}")
-    
-    try:
-        # 모델 생성 시 상태를 명시적으로 READY로 설정
-        model_data = model_in.model_dump(exclude={"voice_actor_id"})
-        model_data["status"] = ModelStatus.READY  # 생성 시 READY 상태로 시작
-        
-        voice_model = VoiceModel(
-            **model_data,
-            voice_actor_id=model_in.voice_actor_id,
-            model_path=str(model_path)
-        )
-        
-        session.add(voice_model)
-        session.commit()
-        session.refresh(voice_model)
-        
-        logger.info(f"Voice model created successfully: {voice_model.id}")
-        return voice_model
-        
-    except Exception as e:
-        logger.error(f"Failed to create voice model: {e}")
-        session.rollback()
-        raise HTTPException(status_code=500, detail=f"모델 생성 중 오류 발생: {str(e)}")
-
-@router.get("/models/raw")
-def get_voice_models_raw(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser
-):
-    """음성 모델 목록 조회 (원본 데이터, 디버깅용)"""
-    logger.info(f"🔍 GET /voice-actors/models/raw called (디버깅용)")
-    
-    try:
-        statement = select(VoiceModel).limit(3)  # 처음 3개만
-        voice_models = session.exec(statement).all()
-        
-        # 각 모델을 수동으로 dict로 변환
-        models_data = []
-        for model in voice_models:
-            model_dict = {
-                "id": str(model.id),
-                "model_name": model.model_name,
-                "voice_actor_id": str(model.voice_actor_id),
-                "model_path": model.model_path,
-                "status": model.status,
-                "quality_score": model.quality_score,
-                "created_at": model.created_at.isoformat() if model.created_at else None,
-                "updated_at": model.updated_at.isoformat() if model.updated_at else None,
-                "config": model.config,
-                "model_version": model.model_version,
-                "training_data_duration": model.training_data_duration
-            }
-            models_data.append(model_dict)
-            logger.info(f"📊 Model dict: {model_dict}")
-        
-        return {
-            "message": "Raw models data (debugging)",
-            "count": len(voice_models),
-            "models": models_data
-        }
-        
-    except Exception as e:
-        logger.error(f"💥 ERROR in get_voice_models_raw: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return {
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
-
-@router.get("/models", response_model=List[VoiceModelPublic])
-def get_voice_models(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 20
-) -> List[VoiceModelPublic]:
-    """음성 모델 목록 조회"""
-    logger.info(f"🎯 GET /voice-actors/models called")
-    logger.info(f"📋 Parameters: skip={skip}, limit={limit}")
-    logger.info(f"👤 Current user: {current_user.id}")
-    
-    try:
-        logger.info(f"📊 Starting database query...")
-        
-        # 기본 쿼리 실행 (필터 없이)
-        statement = select(VoiceModel)
-        logger.info(f"✏️ Created base statement: {statement}")
-        
-        statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
-        logger.info(f"🔄 Applied pagination and ordering")
-        
-        logger.info(f"⚡ Executing database query...")
-        voice_models = session.exec(statement).all()
-        
-        logger.info(f"📈 Query completed successfully")
-        logger.info(f"🎯 Found {len(voice_models)} voice models")
-        
-        # 모델 정보 상세 로그
-        for i, model in enumerate(voice_models[:3]):  # 처음 3개만 로그
-            logger.info(f"📝 Model {i+1}: id={model.id}, name='{model.model_name}', status={model.status}")
-            logger.info(f"📝 Model {i+1} voice_actor_id: {model.voice_actor_id}")
-            logger.info(f"📝 Model {i+1} created_at: {model.created_at}")
-        
-        if len(voice_models) > 3:
-            logger.info(f"... and {len(voice_models) - 3} more models")
-        
-        logger.info(f"🔄 Converting {len(voice_models)} models to VoiceModelPublic...")
-        
-        # VoiceModel 객체들을 VoiceModelPublic으로 변환
-        public_models = []
-        for model in voice_models:
-            try:
-                public_model = VoiceModelPublic.model_validate(model)
-                public_models.append(public_model)
-                logger.info(f"✅ Converted model {model.id}: {model.model_name}")
-            except Exception as e:
-                logger.error(f"❌ Failed to convert model {model.id}: {e}")
-                logger.error(f"📝 Model data: {model.__dict__}")
-                # 422 오류를 피하기 위해 변환 실패한 모델은 건너뛰기
-                continue
-        
-        logger.info(f"✅ Successfully converted {len(public_models)} out of {len(voice_models)} models")
-        return public_models
-        
-    except Exception as e:
-        logger.error(f"💥 ERROR in get_voice_models")
-        logger.error(f"🔥 Error type: {type(e).__name__}")
-        logger.error(f"📝 Error message: {str(e)}")
-        logger.error(f"📍 Error location: {e.__class__.__module__}")
-        
-        import traceback
-        logger.error(f"📚 Full traceback:")
-        logger.error(traceback.format_exc())
-        
-        raise HTTPException(status_code=500, detail=f"음성 모델 조회 중 예상치 못한 오류: {str(e)}")
-
-@router.get("/models/{model_id}", response_model=VoiceModelPublic)
-def get_voice_model(
-    *,
-    session: SessionDep,
-    model_id: uuid.UUID,
-    current_user: CurrentUser
-) -> VoiceModel:
-    """특정 음성 모델 조회"""
-    voice_model = session.get(VoiceModel, model_id)
-    if not voice_model:
-        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
-    return voice_model
-
-@router.put("/models/{model_id}", response_model=VoiceModelPublic)
-def update_voice_model(
-    *,
-    session: SessionDep,
-    model_id: uuid.UUID,
-    model_in: VoiceModelUpdate,
-    current_user: CurrentUser
-) -> VoiceModel:
-    """음성 모델 정보 수정"""
-    voice_model = session.get(VoiceModel, model_id)
-    if not voice_model:
-        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
-    
-    update_data = model_in.model_dump(exclude_unset=True)
-    voice_model.sqlmodel_update(update_data)
-    voice_model.updated_at = datetime.now()
-    
-    session.add(voice_model)
-    session.commit()
-    session.refresh(voice_model)
-    return voice_model
-
-@router.delete("/models/{model_id}")
-def delete_voice_model(
-    *,
-    session: SessionDep,
-    model_id: uuid.UUID,
-    current_user: CurrentUser
-):
-    """음성 모델 삭제"""
-    voice_model = session.get(VoiceModel, model_id)
-    if not voice_model:
-        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
-    
-    # 모델 파일 삭제
-    model_file = Path(voice_model.model_path)
-    if model_file.exists():
-        try:
-            model_file.unlink()
-        except Exception as e:
-            logger.warning(f"Failed to delete model file {model_file}: {e}")
-    
-    session.delete(voice_model)
-    session.commit()
-    
-    return {"message": "음성 모델이 삭제되었습니다."}
-
-@router.post("/models/{model_id}/train")
-async def train_voice_model(
-    *,
-    session: SessionDep,
-    model_id: uuid.UUID,
-    current_user: CurrentUser,
-    background_tasks: BackgroundTasks
-):
-    """음성 모델 학습 시작"""
-    logger.info(f"🎯 Train voice model API called for model_id: {model_id} by user: {current_user.id}")
-    
-    voice_model = session.get(VoiceModel, model_id)
-    if not voice_model:
-        logger.error(f"❌ Voice model {model_id} not found")
-        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
-    
-    logger.info(f"📋 Found voice model: {voice_model.model_name} (status: {voice_model.status})")
-
-    if voice_model.status == ModelStatus.TRAINING:
-        logger.warning(f"⚠️ Model {model_id} is already training, will restart training")
-        # 이미 학습 중인 모델도 재시작 허용 (기존 학습을 중단하고 새로 시작)
-        logger.info(f"🔄 Restarting training for model {model_id}")
-
-    # 성우의 음성 샘플 확인
-    samples_query = select(VoiceSample).where(VoiceSample.voice_actor_id == voice_model.voice_actor_id)
-    samples_count = session.exec(samples_query).all()
-    
-    logger.info(f"🎤 Found {len(samples_count)} voice samples for voice actor {voice_model.voice_actor_id}")
-
-    if len(samples_count) < 1:  # 최소 1개로 완화
-        logger.error(f"❌ Insufficient voice samples: {len(samples_count)} found, minimum 1 required")
-        raise HTTPException(
-            status_code=400, 
-            detail=f"모델 학습을 위해서는 최소 1개의 음성 샘플이 필요합니다. 현재: {len(samples_count)}개"
-        )
-
-    logger.info(f"✅ Voice samples validation passed. Starting training process...")
-    
-    # 모델 상태를 학습 중으로 변경 (재시작인 경우 config 초기화)
-    if voice_model.status == ModelStatus.TRAINING:
-        voice_model.config = {"restarted_at": datetime.now().isoformat()}
-    
-    voice_model.status = ModelStatus.TRAINING
-    voice_model.updated_at = datetime.now()
-    session.add(voice_model)
-    session.commit()
-    
-    logger.info(f"🔄 Model status updated to TRAINING")
-
-    # 백그라운드에서 모델 학습 시작
-    logger.info(f"🚀 Adding background task for model training")
-    background_tasks.add_task(
-        tts_service.train_voice_model,
-        model_id
-    )
-    
-    logger.info(f"✅ Training task added successfully")
-
-    return {
-        "message": "음성 모델 학습이 시작되었습니다.",
-        "model_id": model_id,
-        "status": "training",
-        "voice_actor_id": voice_model.voice_actor_id,
-        "model_name": voice_model.model_name,
-        "samples_count": len(samples_count)
-    }
-
-# Legacy 라우터 (deprecated, 하위 호환성을 위해 유지)
-@router.post("/{voice_actor_id}/models", response_model=VoiceModelPublic)
-def create_voice_model_legacy(
-    *,
-    session: SessionDep,
-    voice_actor_id: uuid.UUID,
-    model_in: VoiceModelCreate,
-    current_user: CurrentUser
-) -> VoiceModel:
-    """새 음성 모델 생성 (Legacy 경로 - deprecated)"""
-    logger.warning(f"Using deprecated voice model creation endpoint: /voice-actors/{voice_actor_id}/models")
-    logger.warning("Please use /voice-actors/models instead")
-    
-    # voice_actor_id를 model_in에 설정
-    model_in.voice_actor_id = voice_actor_id
-    
-    # 기존 create_voice_model 함수 호출
-    return create_voice_model(
-        session=session,
-        model_in=model_in,
-        current_user=current_user
-    )
 
 # === TTS 라이브러리 관리 ===
 
@@ -1246,8 +825,9 @@ def test_voice_actors_api():
         "status": "healthy",
         "endpoints": {
             "voice_actors": "/voice-actors",
-            "models": "/voice-actors/models",
-            "train_model": "/voice-actors/models/{model_id}/train",
+            "tts_scripts": "/voice-actors/tts-scripts",
+            "tts_generations": "/voice-actors/tts-generations",
+            "tts_library": "/voice-actors/tts-library",
             "debug_diagnosis": "/voice-actors/debug/diagnosis",
             "debug_fix": "/voice-actors/debug/fix-issues"
         }

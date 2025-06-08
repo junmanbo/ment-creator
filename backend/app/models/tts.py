@@ -51,13 +51,11 @@ class TTSGenerationBase(SQLModel):
 
 class TTSGenerateRequest(SQLModel):
     script_id: uuid.UUID
-    voice_model_id: Optional[uuid.UUID] = None
     generation_params: Optional[Dict[str, Any]] = None
 
 class TTSGeneration(TTSGenerationBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     script_id: uuid.UUID = Field(foreign_key="ttsscript.id")
-    voice_model_id: Optional[uuid.UUID] = Field(foreign_key="voicemodel.id")
     audio_file_path: Optional[str] = Field(default=None, max_length=500)
     file_size: Optional[int] = None  # bytes
     duration: Optional[float] = None  # 초 단위
@@ -71,7 +69,6 @@ class TTSGeneration(TTSGenerationBase, table=True):
     
     # 관계 정의
     script: Optional[TTSScript] = Relationship(back_populates="generations")
-    voice_model: Optional["VoiceModel"] = Relationship()
     requested_by_user: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[TTSGeneration.requested_by]"}
     )
@@ -79,7 +76,6 @@ class TTSGeneration(TTSGenerationBase, table=True):
 class TTSGenerationPublic(TTSGenerationBase):
     id: uuid.UUID
     script_id: uuid.UUID
-    voice_model_id: Optional[uuid.UUID] = None
     audio_file_path: Optional[str] = None
     file_size: Optional[int] = None
     duration: Optional[float] = None

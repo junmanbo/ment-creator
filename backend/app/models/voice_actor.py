@@ -19,11 +19,7 @@ class AgeRangeType(str, Enum):
     FIFTIES = "50s"
     SENIOR = "senior"
 
-class ModelStatus(str, Enum):
-    TRAINING = "training"
-    READY = "ready"
-    ERROR = "error"
-    DEPRECATED = "deprecated"
+
 
 # 성우 정보
 class VoiceActorBase(SQLModel):
@@ -56,7 +52,7 @@ class VoiceActor(VoiceActorBase, table=True):
     created_by_user: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[VoiceActor.created_by]"}
     )
-    voice_models: List["VoiceModel"] = Relationship(back_populates="voice_actor")
+
     voice_samples: List["VoiceSample"] = Relationship(back_populates="voice_actor")
 
 class VoiceActorPublic(VoiceActorBase):
@@ -65,40 +61,7 @@ class VoiceActorPublic(VoiceActorBase):
     created_at: datetime
     updated_at: datetime
 
-# 음성 모델
-class VoiceModelBase(SQLModel):
-    model_name: str = Field(max_length=200)
-    model_version: str = Field(default="1.0", max_length=20)
-    training_data_duration: Optional[int] = None  # 학습 데이터 시간(초)
-    quality_score: Optional[float] = Field(default=None, ge=0, le=100)
-    status: ModelStatus = ModelStatus.READY  # TRAINING → READY로 변경
-    config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 모델 설정
 
-class VoiceModelCreate(VoiceModelBase):
-    voice_actor_id: uuid.UUID
-
-class VoiceModelUpdate(VoiceModelBase):
-    model_name: Optional[str] = None
-    model_version: Optional[str] = None
-    status: Optional[ModelStatus] = None
-    quality_score: Optional[float] = None
-
-class VoiceModel(VoiceModelBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    voice_actor_id: uuid.UUID = Field(foreign_key="voiceactor.id")
-    model_path: str = Field(max_length=500)
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-    
-    # 관계 정의
-    voice_actor: Optional[VoiceActor] = Relationship(back_populates="voice_models")
-
-class VoiceModelPublic(VoiceModelBase):
-    id: uuid.UUID
-    voice_actor_id: uuid.UUID
-    model_path: str
-    created_at: datetime
-    updated_at: datetime
 
 # 음성 샘플
 class VoiceSampleBase(SQLModel):
