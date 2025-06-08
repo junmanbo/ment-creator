@@ -467,6 +467,13 @@ class TTSService:
                 logger.error(f"Voice model {model_id} not found")
                 return
             
+            # 상태를 TRAINING으로 즉시 업데이트
+            voice_model.status = ModelStatus.TRAINING
+            voice_model.updated_at = datetime.now()
+            session.add(voice_model)
+            session.commit()
+            logger.info(f"Voice model {model_id} status set to TRAINING")
+            
             try:
                 logger.info(f"Starting training for voice model {model_id}: {voice_model.model_name}")
                 
@@ -477,10 +484,12 @@ class TTSService:
                     )
                 ).all()
                 
-                if len(samples) < 1:  # 최소 1개로 완화 (테스트용)
-                    raise ValueError(f"음성 샘플이 부족합니다. 현재: {len(samples)}개, 최소 1개 필요")
+                logger.info(f"Found {len(samples)} voice samples for model {model_id}")
                 
-                logger.info(f"Found {len(samples)} voice samples for training")
+                if len(samples) < 1:  # 최소 1개로 완화 (테스트용)
+                    error_msg = f"음성 샘플이 부족합니다. 현재: {len(samples)}개, 최소 1개 필요"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
                 
                 # 학습 데이터 유효성 검사
                 valid_samples = []

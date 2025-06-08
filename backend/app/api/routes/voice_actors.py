@@ -1,5 +1,6 @@
 import uuid
 import logging
+import traceback
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
@@ -26,6 +27,7 @@ from app.models.tts import (
 )
 
 from app.services.tts_service import tts_service
+from app.services.tts_service_debug import tts_debugger
 
 # TTS Generation with Script info
 class TTSGenerationWithScript(TTSGenerationPublic):
@@ -499,6 +501,102 @@ def get_batch_generation_status(
         "generations": [TTSGenerationPublic.model_validate(g) for g in generations],
         "summary": status_summary
     }
+
+# === TTS 디버깅 및 진단 ===
+
+@router.get("/debug/diagnosis")
+async def diagnose_tts_environment(
+    *,
+    current_user: CurrentUser
+):
+    """TTS 환경 전체 진단 - Voice Model 생성 문제 해결용"""
+    logger.info(f"TTS diagnosis requested by user {current_user.id}")
+    
+    try:
+        diagnosis = await tts_debugger.diagnose_tts_environment()
+        return {
+            "message": "TTS 환경 진단 완료",
+            "diagnosis": diagnosis
+        }
+    except Exception as e:
+        logger.error(f"TTS diagnosis failed: {e}")
+        return {
+            "message": "TTS 환경 진단 실패",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+@router.post("/debug/fix-issues")
+async def fix_common_tts_issues(
+    *,
+    current_user: CurrentUser
+):
+    """일반적인 TTS 문제들 자동 수정"""
+    logger.info(f"TTS auto-fix requested by user {current_user.id}")
+    
+    try:
+        results = await tts_debugger.fix_common_issues()
+        return {
+            "message": "TTS 문제 자동 수정 완료",
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"TTS auto-fix failed: {e}")
+        return {
+            "message": "TTS 문제 자동 수정 실패",
+            "error": str(e)
+        }
+
+@router.post("/models/{model_id}/debug-train")
+async def debug_train_voice_model(
+    *,
+    session: SessionDep,
+    model_id: uuid.UUID,
+    current_user: CurrentUser
+):
+    """음성 모델 학습 디버그 모드 (동기 실행으로 오류 확인)"""
+    voice_model = session.get(VoiceModel, model_id)
+    if not voice_model:
+        raise HTTPException(status_code=404, detail="음성 모델을 찾을 수 없습니다.")
+    
+    logger.info(f"Debug training started for model {model_id} by user {current_user.id}")
+    
+    try:
+        # 동기 실행으로 오류 즉시 확인
+        await tts_service.train_voice_model(model_id)
+        
+        # 결과 확인
+        session.refresh(voice_model)
+        
+        return {
+            "message": "디버그 모드 학습 완료",
+            "model_id": str(model_id),
+            "status": voice_model.status,
+            "quality_score": voice_model.quality_score,
+            "config": voice_model.config
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug training failed for model {model_id}: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # 모델 상태를 에러로 업데이트
+        voice_model.status = ModelStatus.ERROR
+        voice_model.config = {
+            "error_message": str(e),
+            "error_type": type(e).__name__,
+            "error_occurred_at": datetime.now().isoformat()
+        }
+        session.add(voice_model)
+        session.commit()
+        
+        return {
+            "message": "디버그 모드 학습 실패",
+            "model_id": str(model_id),
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "status": "error"
+        }
 
 # === 음성 모델 관리 ===
 
