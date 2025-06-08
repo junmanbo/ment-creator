@@ -118,4 +118,14 @@ async def list_models(
             "data": []
         }
 
+# 임시: /v1/models 엔드포인트 추가 (디버깅용)
+@app.get("/v1/models", tags=["debug"])
+async def debug_v1_models():
+    """임시 디버깅용 엔드포인트 - 실제 호출되는지 확인"""
+    logger.warning("🚨 /v1/models 엔드포인트가 호출되었습니다!")
+    return {
+        "message": "Debug endpoint called",
+        "note": "이 엔드포인트는 디버깅용입니다. 실제 경로: /api/v1/voice-actors/models"
+    }
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
