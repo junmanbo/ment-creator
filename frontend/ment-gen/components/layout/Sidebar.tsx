@@ -73,47 +73,11 @@ const menuItems: MenuItem[] = [
     href: "/voice-actors",
     icon: Mic,
     badge: "8",
-    children: [
-      {
-        title: "성우 목록",
-        href: "/voice-actors",
-        icon: Users,
-      },
-      {
-        title: "음성 모델",
-        href: "/voice-actors/models",
-        icon: Database,
-      },
-      {
-        title: "음성 샘플",
-        href: "/voice-actors/samples",
-        icon: Volume2,
-      },
-    ],
   },
   {
-    title: "TTS 관리",
-    href: "/tts",
-    icon: Volume2,
-    badge: "새로운",
-    badgeVariant: "destructive" as const,
-    children: [
-      {
-        title: "TTS 생성 & 관리",
-        href: "/tts",
-        icon: Volume2,
-      },
-      {
-        title: "멘트 목록",
-        href: "/list",
-        icon: Activity,
-      },
-      {
-        title: "음성 라이브러리",
-        href: "/tts/library",
-        icon: Database,
-      },
-    ],
+    title: "멘트 목록",
+    href: "/list",
+    icon: FileText,
   },
   {
     title: "시스템 모니터링",
