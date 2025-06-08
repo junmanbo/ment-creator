@@ -22,11 +22,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # 요청 로깅
         logger.info(f"🔍 Request: {request.method} {request.url.path} | Query: {request.url.query}")
         
-        # 404 에러가 예상되는 요청 특별 로깅
-        if "/models" in request.url.path or "/v1/" in request.url.path:
-            logger.warning(f"⚠️  Models 관련 요청 감지: {request.method} {request.url.path}")
-            logger.warning(f"   전체 URL: {request.url}")
-            logger.warning(f"   Headers: {dict(request.headers)}")
+        # Filter OpenAI SDK automatic requests to reduce unnecessary logs
+        if "/models" in request.url.path and "OpenAI" in request.headers.get("user-agent", ""):
+            # Skip logging for OpenAI SDK automatic model list requests
+            pass
+        elif "/v1/" in request.url.path and request.url.path != "/api/v1":
+            logger.info(f"🔍 External v1 request: {request.method} {request.url.path}")
         
         response = await call_next(request)
         
@@ -59,7 +60,19 @@ async def lifespan(app: FastAPI):
     # Shutdown: cleanup if needed
 
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
-    sentry_sdk.init(dsn=str(settings.SENTRY_DSN), enable_tracing=True)
+    sentry_sdk.init(
+        dsn=str(settings.SENTRY_DSN), 
+        enable_tracing=True,
+        # Disable OpenAI integration to prevent automatic /v1/models requests
+        auto_enabling_integrations=False,
+        default_integrations=False,
+        integrations=[
+            # Only enable essential integrations
+            sentry_sdk.integrations.fastapi.FastApiIntegration(auto_enable=True),
+            sentry_sdk.integrations.sqlalchemy.SqlalchemyIntegration(),
+            sentry_sdk.integrations.logging.LoggingIntegration(),
+        ]
+    )
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -118,14 +131,7 @@ async def list_models(
             "data": []
         }
 
-# 임시: /v1/models 엔드포인트 추가 (디버깅용)
-@app.get("/v1/models", tags=["debug"])
-async def debug_v1_models():
-    """임시 디버깅용 엔드포인트 - 실제 호출되는지 확인"""
-    logger.warning("🚨 /v1/models 엔드포인트가 호출되었습니다!")
-    return {
-        "message": "Debug endpoint called",
-        "note": "이 엔드포인트는 디버깅용입니다. 실제 경로: /api/v1/voice-actors/models"
-    }
+# NOTE: /v1/models 디버깅 엔드포인트 제거됨
+# OpenAI SDK의 자동 모델 목록 조회 요청을 차단하기 위해 404 응답 허용
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
