@@ -600,6 +600,9 @@ async def debug_train_voice_model(
 
 # === 음성 모델 관리 ===
 
+# 🔥 중요: 구체적인 경로를 먼저 정의해야 함!
+# /models 가 /{voice_actor_id}/models 보다 먼저 와야 FastAPI 라우팅이 정상 작동
+
 # 필터링을 위한 별도 엔드포인트 추가
 @router.get("/models/filter", response_model=List[VoiceModelPublic])
 def get_voice_models_with_filter(
@@ -743,28 +746,6 @@ def create_voice_model(
         logger.error(f"Failed to create voice model: {e}")
         session.rollback()
         raise HTTPException(status_code=500, detail=f"모델 생성 중 오류 발생: {str(e)}")
-
-@router.post("/{voice_actor_id}/models", response_model=VoiceModelPublic)
-def create_voice_model_legacy(
-    *,
-    session: SessionDep,
-    voice_actor_id: uuid.UUID,
-    model_in: VoiceModelCreate,
-    current_user: CurrentUser
-) -> VoiceModel:
-    """새 음성 모델 생성 (Legacy 경로 - deprecated)"""
-    logger.warning(f"Using deprecated voice model creation endpoint: /voice-actors/{voice_actor_id}/models")
-    logger.warning("Please use /voice-actors/models instead")
-    
-    # voice_actor_id를 model_in에 설정
-    model_in.voice_actor_id = voice_actor_id
-    
-    # 기존 create_voice_model 함수 호출
-    return create_voice_model(
-        session=session,
-        model_in=model_in,
-        current_user=current_user
-    )
 
 @router.get("/models", response_model=List[VoiceModelPublic])
 def get_voice_models(
@@ -921,6 +902,29 @@ async def train_voice_model(
         "model_name": voice_model.model_name,
         "samples_count": len(samples_count)
     }
+
+# Legacy 라우터 (deprecated, 하위 호환성을 위해 유지)
+@router.post("/{voice_actor_id}/models", response_model=VoiceModelPublic)
+def create_voice_model_legacy(
+    *,
+    session: SessionDep,
+    voice_actor_id: uuid.UUID,
+    model_in: VoiceModelCreate,
+    current_user: CurrentUser
+) -> VoiceModel:
+    """새 음성 모델 생성 (Legacy 경로 - deprecated)"""
+    logger.warning(f"Using deprecated voice model creation endpoint: /voice-actors/{voice_actor_id}/models")
+    logger.warning("Please use /voice-actors/models instead")
+    
+    # voice_actor_id를 model_in에 설정
+    model_in.voice_actor_id = voice_actor_id
+    
+    # 기존 create_voice_model 함수 호출
+    return create_voice_model(
+        session=session,
+        model_in=model_in,
+        current_user=current_user
+    )
 
 # === TTS 라이브러리 관리 ===
 
