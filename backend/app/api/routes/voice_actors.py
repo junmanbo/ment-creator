@@ -677,8 +677,12 @@ def create_voice_model(
     logger.info(f"Model will be saved to: {model_path}")
     
     try:
+        # 모델 생성 시 상태를 명시적으로 READY로 설정
+        model_data = model_in.model_dump(exclude={"voice_actor_id"})
+        model_data["status"] = ModelStatus.READY  # 생성 시 READY 상태로 시작
+        
         voice_model = VoiceModel(
-            **model_in.model_dump(exclude={"voice_actor_id"}),
+            **model_data,
             voice_actor_id=model_in.voice_actor_id,
             model_path=str(model_path)
         )
@@ -862,8 +866,9 @@ async def train_voice_model(
     logger.info(f"📋 Found voice model: {voice_model.model_name} (status: {voice_model.status})")
 
     if voice_model.status == ModelStatus.TRAINING:
-        logger.warning(f"⚠️ Model {model_id} is already training")
-        raise HTTPException(status_code=400, detail="이미 학습 중인 모델입니다.")
+        logger.warning(f"⚠️ Model {model_id} is already training, will restart training")
+        # 이미 학습 중인 모델도 재시작 허용 (기존 학습을 중단하고 새로 시작)
+        logger.info(f"🔄 Restarting training for model {model_id}")
 
     # 성우의 음성 샘플 확인
     samples_query = select(VoiceSample).where(VoiceSample.voice_actor_id == voice_model.voice_actor_id)
@@ -880,7 +885,10 @@ async def train_voice_model(
 
     logger.info(f"✅ Voice samples validation passed. Starting training process...")
     
-    # 모델 상태를 학습 중으로 변경
+    # 모델 상태를 학습 중으로 변경 (재시작인 경우 config 초기화)
+    if voice_model.status == ModelStatus.TRAINING:
+        voice_model.config = {"restarted_at": datetime.now().isoformat()}
+    
     voice_model.status = ModelStatus.TRAINING
     voice_model.updated_at = datetime.now()
     session.add(voice_model)

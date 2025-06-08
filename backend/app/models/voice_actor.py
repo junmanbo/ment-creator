@@ -71,7 +71,7 @@ class VoiceModelBase(SQLModel):
     model_version: str = Field(default="1.0", max_length=20)
     training_data_duration: Optional[int] = None  # 학습 데이터 시간(초)
     quality_score: Optional[float] = Field(default=None, ge=0, le=100)
-    status: ModelStatus = ModelStatus.TRAINING
+    status: ModelStatus = ModelStatus.READY  # TRAINING → READY로 변경
     config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 모델 설정
 
 class VoiceModelCreate(VoiceModelBase):
