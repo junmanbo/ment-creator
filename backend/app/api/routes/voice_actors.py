@@ -648,6 +648,29 @@ def get_voice_models_with_filter(
         logger.error(f"Error in get_voice_models_with_filter: {e}")
         raise HTTPException(status_code=500, detail=f"음성 모델 조회 중 오류: {str(e)}")
 
+# 🐛 디버깅용 엔드포인트 추가
+@router.get("/debug/routes")
+def debug_routes_info(*, current_user: CurrentUser):
+    """라우터 매칭 디버깅용 엔드포인트"""
+    logger.info(f"🔍 Debug routes endpoint called by user {current_user.id}")
+    
+    return {
+        "message": "Route debugging info",
+        "current_user_id": str(current_user.id),
+        "available_routes": [
+            "GET /voice-actors/models/filter",
+            "GET /voice-actors/models/debug", 
+            "GET /voice-actors/models",
+            "POST /voice-actors/models",
+            "GET /voice-actors/models/{model_id}",
+            "PUT /voice-actors/models/{model_id}",
+            "DELETE /voice-actors/models/{model_id}",
+            "POST /voice-actors/models/{model_id}/train",
+            "POST /voice-actors/{voice_actor_id}/models (Legacy)"
+        ],
+        "this_route_matched": "GET /voice-actors/debug/routes"
+    }
+
 @router.get("/models/debug")
 def debug_voice_models_api(*, current_user: CurrentUser, session: SessionDep):
     """모델 API 디버깅 엔드포인트"""
@@ -747,6 +770,53 @@ def create_voice_model(
         session.rollback()
         raise HTTPException(status_code=500, detail=f"모델 생성 중 오류 발생: {str(e)}")
 
+@router.get("/models/raw")
+def get_voice_models_raw(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser
+):
+    """음성 모델 목록 조회 (원본 데이터, 디버깅용)"""
+    logger.info(f"🔍 GET /voice-actors/models/raw called (디버깅용)")
+    
+    try:
+        statement = select(VoiceModel).limit(3)  # 처음 3개만
+        voice_models = session.exec(statement).all()
+        
+        # 각 모델을 수동으로 dict로 변환
+        models_data = []
+        for model in voice_models:
+            model_dict = {
+                "id": str(model.id),
+                "model_name": model.model_name,
+                "voice_actor_id": str(model.voice_actor_id),
+                "model_path": model.model_path,
+                "status": model.status,
+                "quality_score": model.quality_score,
+                "created_at": model.created_at.isoformat() if model.created_at else None,
+                "updated_at": model.updated_at.isoformat() if model.updated_at else None,
+                "config": model.config,
+                "model_version": model.model_version,
+                "training_data_duration": model.training_data_duration
+            }
+            models_data.append(model_dict)
+            logger.info(f"📊 Model dict: {model_dict}")
+        
+        return {
+            "message": "Raw models data (debugging)",
+            "count": len(voice_models),
+            "models": models_data
+        }
+        
+    except Exception as e:
+        logger.error(f"💥 ERROR in get_voice_models_raw: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
 @router.get("/models", response_model=List[VoiceModelPublic])
 def get_voice_models(
     *,
@@ -756,24 +826,48 @@ def get_voice_models(
     limit: int = 20
 ) -> List[VoiceModel]:
     """음성 모델 목록 조회"""
-    logger.info(f"get_voice_models called with: skip={skip}, limit={limit}")
+    logger.info(f"🎯 GET /voice-actors/models called")
+    logger.info(f"📋 Parameters: skip={skip}, limit={limit}")
+    logger.info(f"👤 Current user: {current_user.id}")
     
     try:
+        logger.info(f"📊 Starting database query...")
+        
         # 기본 쿼리 실행 (필터 없이)
         statement = select(VoiceModel)
-        statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
+        logger.info(f"✏️ Created base statement: {statement}")
         
-        logger.info(f"Executing query")
+        statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
+        logger.info(f"🔄 Applied pagination and ordering")
+        
+        logger.info(f"⚡ Executing database query...")
         voice_models = session.exec(statement).all()
         
-        logger.info(f"Found {len(voice_models)} voice models")
+        logger.info(f"📈 Query completed successfully")
+        logger.info(f"🎯 Found {len(voice_models)} voice models")
+        
+        # 모델 정보 상세 로그
+        for i, model in enumerate(voice_models[:3]):  # 처음 3개만 로그
+            logger.info(f"📝 Model {i+1}: id={model.id}, name='{model.model_name}', status={model.status}")
+            logger.info(f"📝 Model {i+1} voice_actor_id: {model.voice_actor_id}")
+            logger.info(f"📝 Model {i+1} created_at: {model.created_at}")
+        
+        if len(voice_models) > 3:
+            logger.info(f"... and {len(voice_models) - 3} more models")
+        
+        logger.info(f"✅ Returning {len(voice_models)} models to client")
         return voice_models
         
     except Exception as e:
-        logger.error(f"Unexpected error in get_voice_models: {e}")
-        logger.error(f"Error type: {type(e)}")
+        logger.error(f"💥 ERROR in get_voice_models")
+        logger.error(f"🔥 Error type: {type(e).__name__}")
+        logger.error(f"📝 Error message: {str(e)}")
+        logger.error(f"📍 Error location: {e.__class__.__module__}")
+        
         import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"📚 Full traceback:")
+        logger.error(traceback.format_exc())
+        
         raise HTTPException(status_code=500, detail=f"음성 모델 조회 중 예상치 못한 오류: {str(e)}")
 
 @router.get("/models/{model_id}", response_model=VoiceModelPublic)
