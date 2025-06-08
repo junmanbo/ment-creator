@@ -14,7 +14,7 @@ from datetime import datetime
 
 from sqlmodel import Session
 from app.core.db import engine
-from app.models.voice_actor import VoiceModel, VoiceActor, VoiceSample, ModelStatus
+from app.models.voice_actor import VoiceActor, VoiceSample
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class TTSServiceDebugger:
             "environment": {},
             "dependencies": {},
             "directories": {},
-            "models": {},
+            "voice_actors": {},
             "samples": {},
             "issues": [],
             "recommendations": []
@@ -49,7 +49,7 @@ class TTSServiceDebugger:
         diagnosis["directories"] = await self._check_directories()
         
         # 4. 데이터베이스 상태 확인
-        diagnosis["models"] = await self._check_database_models()
+        diagnosis["voice_actors"] = await self._check_voice_actors()
         diagnosis["samples"] = await self._check_voice_samples()
         
         # 5. 문제점 분석
@@ -139,8 +139,7 @@ class TTSServiceDebugger:
         """디렉토리 구조 확인"""
         directories = {
             "audio_files": {"exists": False, "writable": False, "count": 0},
-            "voice_samples": {"exists": False, "writable": False, "count": 0},
-            "voice_models": {"exists": False, "writable": False, "count": 0}
+            "voice_samples": {"exists": False, "writable": False, "count": 0}
         }
         
         for dir_name in directories.keys():
@@ -153,7 +152,7 @@ class TTSServiceDebugger:
                     directories[dir_name]["count"] = len(list(dir_path.iterdir()))
                     
                     # 하위 디렉토리 상세 정보
-                    if dir_name == "voice_models":
+                    if dir_name == "voice_samples":
                         subdirs = [d for d in dir_path.iterdir() if d.is_dir()]
                         directories[dir_name]["subdirectories"] = []
                         for subdir in subdirs:
@@ -169,50 +168,54 @@ class TTSServiceDebugger:
                 
         return directories
     
-    async def _check_database_models(self) -> Dict[str, Any]:
-        """데이터베이스 음성 모델 상태 확인"""
-        models_info = {
+    async def _check_voice_actors(self) -> Dict[str, Any]:
+        """성우 데이터 상태 확인"""
+        actors_info = {
             "total_count": 0,
-            "by_status": {},
-            "models": []
+            "active_count": 0,
+            "by_gender": {},
+            "by_age_range": {},
+            "actors": []
         }
         
         try:
             with Session(engine) as session:
-                # 모든 음성 모델 조회
                 from sqlmodel import select
-                models = session.exec(select(VoiceModel)).all()
+                actors = session.exec(select(VoiceActor)).all()
                 
-                models_info["total_count"] = len(models)
+                actors_info["total_count"] = len(actors)
+                actors_info["active_count"] = len([a for a in actors if a.is_active])
                 
-                # 상태별 집계
-                status_counts = {}
-                for model in models:
-                    status = model.status.value if hasattr(model.status, 'value') else str(model.status)
-                    status_counts[status] = status_counts.get(status, 0) + 1
+                # 성별 집계
+                gender_counts = {}
+                age_counts = {}
+                for actor in actors:
+                    gender = actor.gender.value if hasattr(actor.gender, 'value') else str(actor.gender)
+                    age_range = actor.age_range.value if hasattr(actor.age_range, 'value') else str(actor.age_range)
+                    
+                    gender_counts[gender] = gender_counts.get(gender, 0) + 1
+                    age_counts[age_range] = age_counts.get(age_range, 0) + 1
                 
-                models_info["by_status"] = status_counts
+                actors_info["by_gender"] = gender_counts
+                actors_info["by_age_range"] = age_counts
                 
-                # 개별 모델 정보
-                for model in models[:10]:  # 최대 10개만
-                    model_info = {
-                        "id": str(model.id),
-                        "name": model.model_name,
-                        "status": model.status.value if hasattr(model.status, 'value') else str(model.status),
-                        "voice_actor_id": str(model.voice_actor_id),
-                        "model_path": model.model_path,
-                        "model_path_exists": Path(model.model_path).exists() if model.model_path else False,
-                        "quality_score": model.quality_score,
-                        "created_at": model.created_at.isoformat() if model.created_at else None,
-                        "updated_at": model.updated_at.isoformat() if model.updated_at else None
+                # 개별 성우 정보 (최대 10개)
+                for actor in actors[:10]:
+                    actor_info = {
+                        "id": str(actor.id),
+                        "name": actor.name,
+                        "gender": actor.gender.value if hasattr(actor.gender, 'value') else str(actor.gender),
+                        "age_range": actor.age_range.value if hasattr(actor.age_range, 'value') else str(actor.age_range),
+                        "is_active": actor.is_active,
+                        "created_at": actor.created_at.isoformat() if actor.created_at else None
                     }
-                    models_info["models"].append(model_info)
+                    actors_info["actors"].append(actor_info)
                     
         except Exception as e:
-            models_info["error"] = str(e)
-            models_info["traceback"] = traceback.format_exc()
+            actors_info["error"] = str(e)
+            actors_info["traceback"] = traceback.format_exc()
             
-        return models_info
+        return actors_info
     
     async def _check_voice_samples(self) -> Dict[str, Any]:
         """음성 샘플 상태 확인"""
@@ -267,7 +270,7 @@ class TTSServiceDebugger:
         
         # TTS 라이브러리 특별 확인
         if not deps.get("TTS", {}).get("installed"):
-            issues.append("TTS library is not installed - this is critical for voice model training")
+            issues.append("TTS library is not installed - this is critical for voice generation")
             recommendations.append("Install TTS library: pip install TTS or uv add TTS")
         
         # 디렉토리 문제 확인
@@ -280,19 +283,14 @@ class TTSServiceDebugger:
                 issues.append(f"Directory {dir_name} is not writable")
                 recommendations.append(f"Fix permissions: chmod 755 {dir_name}")
         
-        # 음성 모델 상태 확인
-        models = diagnosis.get("models", {})
-        if models.get("total_count", 0) > 0:
-            error_models = models.get("by_status", {}).get("error", 0)
-            training_models = models.get("by_status", {}).get("training", 0)
-            
-            if error_models > 0:
-                issues.append(f"{error_models} voice models are in error state")
-                recommendations.append("Check voice model training logs and retry failed models")
-                
-            if training_models > 0:
-                issues.append(f"{training_models} voice models are stuck in training state")
-                recommendations.append("Reset stuck training models or wait for completion")
+        # 성우 데이터 확인
+        actors = diagnosis.get("voice_actors", {})
+        if actors.get("total_count", 0) == 0:
+            issues.append("No voice actors registered")
+            recommendations.append("Register at least one voice actor to enable TTS generation")
+        elif actors.get("active_count", 0) == 0:
+            issues.append("No active voice actors available")
+            recommendations.append("Activate at least one voice actor")
         
         # 음성 샘플 문제 확인
         samples = diagnosis.get("samples", {})
@@ -301,10 +299,14 @@ class TTSServiceDebugger:
             issues.append(f"{missing_files} voice sample files are missing")
             recommendations.append("Re-upload missing voice sample files")
         
+        if samples.get("total_count", 0) == 0:
+            issues.append("No voice samples uploaded")
+            recommendations.append("Upload voice samples for registered voice actors to enable TTS generation")
+        
         # GPU 사용 권장사항
         env = diagnosis.get("environment", {})
         if not env.get("gpu_available"):
-            recommendations.append("Consider using GPU for faster TTS model training (optional)")
+            recommendations.append("Consider using GPU for faster TTS generation (optional)")
         
         return issues, recommendations
     
@@ -317,7 +319,7 @@ class TTSServiceDebugger:
         }
         
         # 1. 디렉토리 생성
-        directories = ["audio_files", "voice_samples", "voice_models"]
+        directories = ["audio_files", "voice_samples"]
         for dir_name in directories:
             try:
                 dir_path = Path(dir_name)
@@ -329,28 +331,30 @@ class TTSServiceDebugger:
             except Exception as e:
                 results["failed"].append(f"Failed to create {dir_name}: {e}")
         
-        # 2. 오류 상태 모델들 리셋
+        # 2. 비활성 성우들 활성화 (필요시)
         try:
             with Session(engine) as session:
-                from sqlmodel import select, update
+                from sqlmodel import select
                 
-                # ERROR 상태인 모델들을 TRAINING으로 변경
-                error_models = session.exec(
-                    select(VoiceModel).where(VoiceModel.status == ModelStatus.ERROR)
+                # 활성 성우가 없으면 첫 번째 성우를 활성화
+                active_actors = session.exec(
+                    select(VoiceActor).where(VoiceActor.is_active == True)
                 ).all()
                 
-                for model in error_models:
-                    model.status = ModelStatus.TRAINING
-                    model.updated_at = datetime.now()
-                    session.add(model)
-                
-                session.commit()
-                
-                if error_models:
-                    results["fixed"].append(f"Reset {len(error_models)} error models to training state")
+                if not active_actors:
+                    first_actor = session.exec(select(VoiceActor)).first()
+                    if first_actor:
+                        first_actor.is_active = True
+                        session.add(first_actor)
+                        session.commit()
+                        results["fixed"].append(f"Activated voice actor: {first_actor.name}")
+                    else:
+                        results["skipped"].append("No voice actors found to activate")
+                else:
+                    results["skipped"].append(f"{len(active_actors)} voice actors already active")
                 
         except Exception as e:
-            results["failed"].append(f"Failed to reset error models: {e}")
+            results["failed"].append(f"Failed to check/activate voice actors: {e}")
         
         return results
 
