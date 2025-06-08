@@ -16,9 +16,11 @@ import {
   Play, 
   Pause, 
   Mic, 
-  Settings, 
   Download,
-  Loader2
+  Loader2,
+  Upload,
+  Volume2,
+  X
 } from "lucide-react"
 
 interface VoiceActor {
@@ -39,6 +41,16 @@ interface VoiceActor {
   updated_at: string
 }
 
+interface VoiceSample {
+  id: string
+  voice_actor_id: string
+  text_content: string
+  audio_file_path?: string
+  duration?: number
+  file_size?: number
+  created_at: string
+}
+
 interface TTSGeneration {
   id: string
   script_id: string
@@ -51,23 +63,10 @@ interface TTSGeneration {
   created_at: string
 }
 
-interface TTSLibraryItem {
-  id: string
-  name: string
-  text_content: string
-  category?: string
-  tags?: string
-  voice_actor_id?: string
-  audio_file_path?: string
-  usage_count: number
-  is_public: boolean
-  created_at: string
-  updated_at: string
-}
-
 export default function VoiceActorsPage() {
   const [voiceActors, setVoiceActors] = useState<VoiceActor[]>([])
   const [selectedActor, setSelectedActor] = useState<VoiceActor | null>(null)
+  const [voiceSamples, setVoiceSamples] = useState<VoiceSample[]>([])
   const [ttsGenerations, setTtsGenerations] = useState<TTSGeneration[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("actors")
@@ -87,6 +86,13 @@ export default function VoiceActorsPage() {
     }
   })
   
+  // 음성 샘플 업로드 상태
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [uploadingActor, setUploadingActor] = useState<VoiceActor | null>(null)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadText, setUploadText] = useState("")
+  const [isUploading, setIsUploading] = useState(false)
+  
   // TTS 생성 상태
   const [ttsText, setTtsText] = useState("")
   const [selectedActorForTts, setSelectedActorForTts] = useState<string>("")
@@ -95,34 +101,17 @@ export default function VoiceActorsPage() {
   // 오디오 재생 상태
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
   
-  // TTS 라이브러리 상태
-  const [libraryItems, setLibraryItems] = useState<TTSLibraryItem[]>([])
-  const [libraryCategories, setLibraryCategories] = useState<string[]>([])
-  const [isLibraryLoading, setIsLibraryLoading] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState<string>("")
-  const [librarySearch, setLibrarySearch] = useState("")
-  const [isCreateLibraryDialogOpen, setIsCreateLibraryDialogOpen] = useState(false)
-  const [newLibraryItem, setNewLibraryItem] = useState({
-    name: "",
-    text_content: "",
-    category: "",
-    tags: "",
-    voice_actor_id: "",
-    is_public: false
-  })
-  
   const { toast } = useToast()
 
   useEffect(() => {
     fetchVoiceActors()
   }, [])
-  
+
   useEffect(() => {
-    if (activeTab === "library") {
-      fetchLibraryItems()
-      fetchLibraryCategories()
+    if (selectedActor) {
+      fetchVoiceSamples(selectedActor.id)
     }
-  }, [activeTab])
+  }, [selectedActor])
 
   const fetchVoiceActors = async () => {
     try {
@@ -152,6 +141,38 @@ export default function VoiceActorsPage() {
       })
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const fetchVoiceSamples = async (actorId: string) => {
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${actorId}/samples`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setVoiceSamples(data)
+      } else {
+        toast({
+          title: "음성 샘플 로드 실패",
+          description: "음성 샘플을 불러오는데 실패했습니다.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Fetch voice samples error:", error)
+      toast({
+        title: "네트워크 오류",
+        description: "서버와의 연결에 문제가 있습니다.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -201,6 +222,67 @@ export default function VoiceActorsPage() {
         description: "서버와의 연결에 문제가 있습니다.",
         variant: "destructive",
       })
+    }
+  }
+
+  const uploadVoiceSample = async () => {
+    if (!uploadFile || !uploadText.trim() || !uploadingActor) {
+      toast({
+        title: "입력 오류",
+        description: "모든 필드를 입력해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsUploading(true)
+    
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const formData = new FormData()
+      formData.append("audio_file", uploadFile)
+      formData.append("text_content", uploadText)
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${uploadingActor.id}/samples`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: formData,
+        }
+      )
+
+      if (response.ok) {
+        const newSample = await response.json()
+        setVoiceSamples([newSample, ...voiceSamples])
+        setIsUploadDialogOpen(false)
+        setUploadFile(null)
+        setUploadText("")
+        setUploadingActor(null)
+        
+        toast({
+          title: "업로드 성공",
+          description: "음성 샘플이 성공적으로 업로드되었습니다.",
+        })
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "업로드 실패",
+          description: errorData.detail || "음성 샘플 업로드에 실패했습니다.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Upload voice sample error:", error)
+      toast({
+        title: "네트워크 오류",
+        description: "서버와의 연결에 문제가 있습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -332,136 +414,15 @@ export default function VoiceActorsPage() {
     poll()
   }
 
-  const fetchLibraryItems = async () => {
-    setIsLibraryLoading(true)
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const params = new URLSearchParams()
-      if (selectedCategory) params.append("category", selectedCategory)
-      if (librarySearch) params.append("search", librarySearch)
-      
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        setLibraryItems(data)
-      }
-    } catch (error) {
-      console.error("Fetch library items error:", error)
-    } finally {
-      setIsLibraryLoading(false)
-    }
-  }
-
-  const fetchLibraryCategories = async () => {
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library/categories`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        setLibraryCategories(data)
-      }
-    } catch (error) {
-      console.error("Fetch library categories error:", error)
-    }
-  }
-
-  const createLibraryItem = async () => {
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          ...newLibraryItem,
-          voice_actor_id: newLibraryItem.voice_actor_id || null
-        }),
-      })
-
-      if (response.ok) {
-        const createdItem = await response.json()
-        setLibraryItems([createdItem, ...libraryItems])
-        setIsCreateLibraryDialogOpen(false)
-        setNewLibraryItem({
-          name: "",
-          text_content: "",
-          category: "",
-          tags: "",
-          voice_actor_id: "",
-          is_public: false
-        })
-        toast({
-          title: "라이브러리 생성 성공",
-          description: "새로운 라이브러리 아이템이 생성되었습니다.",
-        })
-      } else {
-        throw new Error("라이브러리 생성 실패")
-      }
-    } catch (error) {
-      console.error("Create library item error:", error)
-      toast({
-        title: "생성 실패",
-        description: "라이브러리 아이템 생성 중 오류가 발생했습니다.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const useLibraryItem = async (itemId: string) => {
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library/${itemId}/use`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      if (response.ok) {
-        // 사용 횟수 업데이트
-        setLibraryItems(prev => 
-          prev.map(item => 
-            item.id === itemId 
-              ? { ...item, usage_count: item.usage_count + 1 }
-              : item
-          )
-        )
-      }
-    } catch (error) {
-      console.error("Use library item error:", error)
-    }
-  }
-
-  const playAudio = async (audioId: string, audioType: "generation" | "library") => {
+  const playAudio = async (audioId: string, audioType: "sample" | "generation") => {
     try {
       const accessToken = localStorage.getItem("access_token")
       let url = ""
       
-      if (audioType === "generation") {
+      if (audioType === "sample") {
+        url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${selectedActor?.id}/samples/${audioId}/audio`
+      } else {
         url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-generations/${audioId}/audio`
-      } else if (audioType === "library") {
-        url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-library/${audioId}/audio`
       }
 
       const response = await fetch(url, {
@@ -482,7 +443,23 @@ export default function VoiceActorsPage() {
           URL.revokeObjectURL(audioUrl)
         })
         
+        audio.addEventListener("error", () => {
+          setPlayingAudio(null)
+          URL.revokeObjectURL(audioUrl)
+          toast({
+            title: "재생 오류",
+            description: "오디오 파일을 재생할 수 없습니다.",
+            variant: "destructive",
+          })
+        })
+        
         await audio.play()
+      } else {
+        toast({
+          title: "재생 오류",
+          description: "오디오 파일을 찾을 수 없습니다.",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Play audio error:", error)
@@ -524,7 +501,7 @@ export default function VoiceActorsPage() {
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">성우 및 음성 관리</h1>
+        <h1 className="text-2xl font-bold">성우 관리</h1>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -608,11 +585,84 @@ export default function VoiceActorsPage() {
         </Dialog>
       </div>
 
+      {/* 음성 샘플 업로드 다이얼로그 */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {uploadingActor?.name} - 음성 샘플 업로드
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="sample-text">텍스트 내용</Label>
+              <Textarea
+                id="sample-text"
+                value={uploadText}
+                onChange={(e) => setUploadText(e.target.value)}
+                placeholder="음성 샘플의 텍스트 내용을 입력하세요..."
+                rows={3}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="audio-file">오디오 파일</Label>
+              <Input
+                id="audio-file"
+                type="file"
+                accept="audio/*"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                지원 형식: WAV, MP3, M4A, OGG
+              </p>
+            </div>
+            
+            {uploadFile && (
+              <div className="p-2 bg-gray-50 rounded text-sm">
+                <strong>선택된 파일:</strong> {uploadFile.name}
+                <br />
+                <strong>크기:</strong> {(uploadFile.size / 1024).toFixed(1)}KB
+              </div>
+            )}
+            
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsUploadDialogOpen(false)
+                  setUploadFile(null)
+                  setUploadText("")
+                  setUploadingActor(null)
+                }}
+              >
+                취소
+              </Button>
+              <Button 
+                onClick={uploadVoiceSample} 
+                disabled={isUploading || !uploadFile || !uploadText.trim()}
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    업로드 중...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    업로드
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">
           <TabsTrigger value="actors">성우 관리</TabsTrigger>
           <TabsTrigger value="tts">TTS 생성</TabsTrigger>
-          <TabsTrigger value="library">음성 라이브러리</TabsTrigger>
         </TabsList>
 
         <TabsContent value="actors">
@@ -658,75 +708,145 @@ export default function VoiceActorsPage() {
             ))}
           </div>
 
-          {/* 선택된 성우 상세 정보 (간소화됨) */}
+          {/* 선택된 성우 상세 정보 */}
           {selectedActor && (
             <Card className="mt-6">
               <CardHeader>
-                <CardTitle>{selectedActor.name} 상세 정보</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle>{selectedActor.name} 상세 정보</CardTitle>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setUploadingActor(selectedActor)
+                      setIsUploadDialogOpen(true)
+                    }}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    샘플 업로드
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">성별</span>
-                      <p className="text-sm">{selectedActor.gender === "male" ? "남성" : selectedActor.gender === "female" ? "여성" : "중성"}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">연령대</span>
-                      <p className="text-sm">{selectedActor.age_range}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">언어</span>
-                      <p className="text-sm">{selectedActor.language}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">상태</span>
-                      <p className="text-sm">{selectedActor.is_active ? "활성" : "비활성"}</p>
-                    </div>
-                  </div>
-                  
-                  {selectedActor.description && (
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">설명</span>
-                      <p className="text-sm mt-1">{selectedActor.description}</p>
-                    </div>
-                  )}
-                  
-                  {selectedActor.characteristics && (
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">음성 특징</span>
-                      <div className="flex space-x-4 mt-1">
-                        {selectedActor.characteristics.tone && (
-                          <span className="text-sm bg-gray-100 px-2 py-1 rounded">
-                            톤: {selectedActor.characteristics.tone}
-                          </span>
-                        )}
-                        {selectedActor.characteristics.style && (
-                          <span className="text-sm bg-gray-100 px-2 py-1 rounded">
-                            스타일: {selectedActor.characteristics.style}
-                          </span>
-                        )}
-                        {selectedActor.characteristics.specialty && (
-                          <span className="text-sm bg-gray-100 px-2 py-1 rounded">
-                            전문분야: {selectedActor.characteristics.specialty}
-                          </span>
-                        )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* 성우 기본 정보 */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">기본 정보</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">성별</span>
+                        <p className="text-sm">{selectedActor.gender === "male" ? "남성" : selectedActor.gender === "female" ? "여성" : "중성"}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">연령대</span>
+                        <p className="text-sm">{selectedActor.age_range}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">언어</span>
+                        <p className="text-sm">{selectedActor.language}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">상태</span>
+                        <p className="text-sm">{selectedActor.is_active ? "활성" : "비활성"}</p>
                       </div>
                     </div>
-                  )}
-                  
-                  <div className="pt-4 border-t">
-                    <div className="flex space-x-2">
+                    
+                    {selectedActor.description && (
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">설명</span>
+                        <p className="text-sm mt-1">{selectedActor.description}</p>
+                      </div>
+                    )}
+                    
+                    {selectedActor.characteristics && (
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">음성 특징</span>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {selectedActor.characteristics.tone && (
+                            <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+                              톤: {selectedActor.characteristics.tone}
+                            </span>
+                          )}
+                          {selectedActor.characteristics.style && (
+                            <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+                              스타일: {selectedActor.characteristics.style}
+                            </span>
+                          )}
+                          {selectedActor.characteristics.specialty && (
+                            <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+                              전문분야: {selectedActor.characteristics.specialty}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="pt-4 border-t">
                       <Button
                         variant="outline"
                         onClick={() => {
                           setSelectedActorForTts(selectedActor.id)
                           setActiveTab("tts")
                         }}
+                        className="w-full"
                       >
                         <Mic className="h-4 w-4 mr-2" />
                         TTS 생성하기
                       </Button>
+                    </div>
+                  </div>
+                  
+                  {/* 음성 샘플 목록 */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">음성 샘플 ({voiceSamples.length}개)</h4>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {voiceSamples.map((sample) => (
+                        <div key={sample.id} className="p-3 border rounded-lg">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">
+                                {sample.text_content.length > 50 
+                                  ? `${sample.text_content.substring(0, 50)}...` 
+                                  : sample.text_content}
+                              </p>
+                              <div className="flex items-center space-x-2 mt-1 text-xs text-gray-500">
+                                {sample.duration && (
+                                  <span>{sample.duration.toFixed(1)}초</span>
+                                )}
+                                {sample.file_size && (
+                                  <span>{(sample.file_size / 1024).toFixed(1)}KB</span>
+                                )}
+                                <span>{new Date(sample.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => playAudio(sample.id, "sample")}
+                              disabled={playingAudio === sample.id}
+                            >
+                              {playingAudio === sample.id ? (
+                                <Pause className="h-4 w-4" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                          
+                          {sample.text_content.length > 50 && (
+                            <p className="text-xs text-gray-600 mt-2">
+                              {sample.text_content}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                      
+                      {voiceSamples.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          <Volume2 className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                          <p className="text-sm">등록된 음성 샘플이 없습니다.</p>
+                          <p className="text-xs mt-1">위의 "샘플 업로드" 버튼을 눌러 음성 샘플을 추가해보세요.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -853,248 +973,6 @@ export default function VoiceActorsPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="library">
-          <div className="space-y-6">
-            {/* 필터 및 검색 */}
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>음성 라이브러리</CardTitle>
-                  <Dialog open={isCreateLibraryDialogOpen} onOpenChange={setIsCreateLibraryDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <Plus className="h-4 w-4 mr-2" />
-                        새 아이템 추가
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-lg">
-                      <DialogHeader>
-                        <DialogTitle>라이브러리 아이템 추가</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="lib-name">이름</Label>
-                          <Input
-                            id="lib-name"
-                            value={newLibraryItem.name}
-                            onChange={(e) => setNewLibraryItem({...newLibraryItem, name: e.target.value})}
-                            placeholder="라이브러리 아이템 이름"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="lib-content">텍스트 내용</Label>
-                          <Textarea
-                            id="lib-content"
-                            value={newLibraryItem.text_content}
-                            onChange={(e) => setNewLibraryItem({...newLibraryItem, text_content: e.target.value})}
-                            placeholder="멘트 내용을 입력하세요"
-                            rows={3}
-                          />
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="lib-category">카테고리</Label>
-                            <Input
-                              id="lib-category"
-                              value={newLibraryItem.category}
-                              onChange={(e) => setNewLibraryItem({...newLibraryItem, category: e.target.value})}
-                              placeholder="예: 인사말, 안내멘트"
-                            />
-                          </div>
-                          
-                          <div>
-                            <Label htmlFor="lib-voice-actor">성우 선택</Label>
-                            <Select 
-                              value={newLibraryItem.voice_actor_id} 
-                              onValueChange={(value) => setNewLibraryItem({...newLibraryItem, voice_actor_id: value})}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="선택 사항" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="">기본 음성</SelectItem>
-                                {voiceActors.filter(actor => actor.is_active).map((actor) => (
-                                  <SelectItem key={actor.id} value={actor.id}>
-                                    {actor.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="lib-tags">태그</Label>
-                          <Input
-                            id="lib-tags"
-                            value={newLibraryItem.tags}
-                            onChange={(e) => setNewLibraryItem({...newLibraryItem, tags: e.target.value})}
-                            placeholder="쉽표로 구분 (예: 인사,안내,공통)"
-                          />
-                        </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="lib-public"
-                            checked={newLibraryItem.is_public}
-                            onChange={(e) => setNewLibraryItem({...newLibraryItem, is_public: e.target.checked})}
-                            className="rounded"
-                          />
-                          <Label htmlFor="lib-public">공개 아이템 (다른 사용자도 사용 가능)</Label>
-                        </div>
-                        
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="outline" onClick={() => setIsCreateLibraryDialogOpen(false)}>
-                            취소
-                          </Button>
-                          <Button 
-                            onClick={createLibraryItem}
-                            disabled={!newLibraryItem.name.trim() || !newLibraryItem.text_content.trim()}
-                          >
-                            추가
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex space-x-4 mb-4">
-                  <div className="flex-1">
-                    <Input
-                      placeholder="라이브러리 검색..."
-                      value={librarySearch}
-                      onChange={(e) => setLibrarySearch(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && fetchLibraryItems()}
-                    />
-                  </div>
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="카테고리 선택" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">전체 카테고리</SelectItem>
-                      {libraryCategories.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={fetchLibraryItems}>검색</Button>
-                </div>
-              </CardContent>
-            </Card>
-            
-            {/* 라이브러리 아이템 목록 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {isLibraryLoading ? (
-                <div className="col-span-3 flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <span className="ml-2">로딩 중...</span>
-                </div>
-              ) : libraryItems.length === 0 ? (
-                <div className="col-span-3 text-center py-8 text-gray-500">
-                  라이브러리 아이템이 없습니다.
-                </div>
-              ) : (
-                libraryItems.map((item) => (
-                  <Card key={item.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-base line-clamp-1">{item.name}</CardTitle>
-                        <div className="flex space-x-1">
-                          {item.category && (
-                            <Badge variant="outline" className="text-xs">
-                              {item.category}
-                            </Badge>
-                          )}
-                          {item.is_public && (
-                            <Badge className="text-xs bg-green-100 text-green-800">
-                              공개
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <p className="text-sm text-gray-600 line-clamp-2">
-                        {item.text_content}
-                      </p>
-                      
-                      {item.tags && (
-                        <div className="flex flex-wrap gap-1">
-                          {item.tags.split(',').map((tag, index) => (
-                            <span key={index} className="text-xs bg-gray-100 px-2 py-1 rounded">
-                              {tag.trim()}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between items-center text-xs text-gray-500">
-                        <span>사용 횟수: {item.usage_count}</span>
-                        <span>{new Date(item.created_at).toLocaleDateString()}</span>
-                      </div>
-                      
-                      <div className="flex space-x-2">
-                        {item.audio_file_path && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => playAudio(item.id, "library")}
-                            disabled={playingAudio === item.id}
-                          >
-                            {playingAudio === item.id ? (
-                              <Pause className="h-4 w-4" />
-                            ) : (
-                              <Play className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                        
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setTtsText(item.text_content)
-                            if (item.voice_actor_id) {
-                              setSelectedActorForTts(item.voice_actor_id)
-                            }
-                            setActiveTab("tts")
-                            useLibraryItem(item.id)
-                          }}
-                        >
-                          <Settings className="h-4 w-4 mr-1" />
-                          사용
-                        </Button>
-                        
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            navigator.clipboard.writeText(item.text_content)
-                            toast({
-                              title: "복사 완료",
-                              description: "텍스트가 클립보드에 복사되었습니다.",
-                            })
-                          }}
-                        >
-                          복사
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
           </div>
         </TabsContent>
       </Tabs>
