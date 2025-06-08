@@ -8,7 +8,7 @@ from sqlmodel import SQLModel
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
@@ -600,6 +600,51 @@ async def debug_train_voice_model(
 
 # === 음성 모델 관리 ===
 
+# 필터링을 위한 별도 엔드포인트 추가
+@router.get("/models/filter", response_model=List[VoiceModelPublic])
+def get_voice_models_with_filter(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 20,
+    voice_actor_id: Optional[str] = None,
+    status: Optional[str] = None
+) -> List[VoiceModel]:
+    """필터링 옵션을 포함한 음성 모델 목록 조회"""
+    logger.info(f"get_voice_models_with_filter called with: skip={skip}, limit={limit}, voice_actor_id={voice_actor_id}, status={status}")
+    
+    try:
+        statement = select(VoiceModel)
+        
+        # 성우 ID 필터 적용
+        if voice_actor_id:
+            try:
+                parsed_voice_actor_id = uuid.UUID(voice_actor_id)
+                statement = statement.where(VoiceModel.voice_actor_id == parsed_voice_actor_id)
+                logger.info(f"Filtering by voice_actor_id: {parsed_voice_actor_id}")
+            except ValueError:
+                logger.warning(f"Invalid voice_actor_id format: {voice_actor_id}, ignoring filter")
+        
+        # 상태 필터 적용
+        if status:
+            try:
+                parsed_status = ModelStatus(status)
+                statement = statement.where(VoiceModel.status == parsed_status)
+                logger.info(f"Filtering by status: {parsed_status}")
+            except ValueError:
+                logger.warning(f"Invalid status value: {status}, ignoring filter")
+        
+        statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
+        voice_models = session.exec(statement).all()
+        
+        logger.info(f"Found {len(voice_models)} voice models with filters")
+        return voice_models
+        
+    except Exception as e:
+        logger.error(f"Error in get_voice_models_with_filter: {e}")
+        raise HTTPException(status_code=500, detail=f"음성 모델 조회 중 오류: {str(e)}")
+
 @router.get("/models/debug")
 def debug_voice_models_api(*, current_user: CurrentUser, session: SessionDep):
     """모델 API 디버깅 엔드포인트"""
@@ -727,48 +772,14 @@ def get_voice_models(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 20,
-    voice_actor_id: Optional[str] = None,  # UUID 파싱 문제 방지
-    status: Optional[str] = None  # ModelStatus enum 파싱 문제 방지
+    limit: int = 20
 ) -> List[VoiceModel]:
     """음성 모델 목록 조회"""
-    logger.info(f"get_voice_models called with: skip={skip}, limit={limit}, voice_actor_id={voice_actor_id}, status={status}")
+    logger.info(f"get_voice_models called with: skip={skip}, limit={limit}")
     
     try:
-        # 입력 파라미터 검증 및 변환
-        parsed_voice_actor_id = None
-        if voice_actor_id:
-            try:
-                parsed_voice_actor_id = uuid.UUID(voice_actor_id)
-                logger.info(f"Parsed voice_actor_id: {parsed_voice_actor_id}")
-            except ValueError as e:
-                logger.error(f"Invalid voice_actor_id format: {voice_actor_id}")
-                raise HTTPException(status_code=422, detail=f"잘못된 성우 ID 형식: {voice_actor_id}")
-        
-        parsed_status = None
-        if status:
-            try:
-                parsed_status = ModelStatus(status)
-                logger.info(f"Parsed status: {parsed_status}")
-            except ValueError as e:
-                logger.error(f"Invalid status value: {status}")
-                valid_statuses = [s.value for s in ModelStatus]
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"잘못된 상태 값: {status}. 가능한 값: {valid_statuses}"
-                )
-        
-        # 쿼리 실행
+        # 기본 쿼리 실행 (필터 없이)
         statement = select(VoiceModel)
-        
-        # 필터 적용
-        if parsed_voice_actor_id:
-            logger.info(f"Filtering by voice_actor_id: {parsed_voice_actor_id}")
-            statement = statement.where(VoiceModel.voice_actor_id == parsed_voice_actor_id)
-        if parsed_status:
-            logger.info(f"Filtering by status: {parsed_status}")
-            statement = statement.where(VoiceModel.status == parsed_status)
-        
         statement = statement.offset(skip).limit(limit).order_by(VoiceModel.created_at.desc())
         
         logger.info(f"Executing query")
@@ -777,9 +788,6 @@ def get_voice_models(
         logger.info(f"Found {len(voice_models)} voice models")
         return voice_models
         
-    except HTTPException:
-        # 이미 처리된 HTTP 예외는 다시 발생
-        raise
     except Exception as e:
         logger.error(f"Unexpected error in get_voice_models: {e}")
         logger.error(f"Error type: {type(e)}")
