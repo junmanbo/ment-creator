@@ -824,7 +824,7 @@ def get_voice_models(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 20
-) -> List[VoiceModel]:
+) -> List[VoiceModelPublic]:
     """음성 모델 목록 조회"""
     logger.info(f"🎯 GET /voice-actors/models called")
     logger.info(f"📋 Parameters: skip={skip}, limit={limit}")
@@ -855,8 +855,23 @@ def get_voice_models(
         if len(voice_models) > 3:
             logger.info(f"... and {len(voice_models) - 3} more models")
         
-        logger.info(f"✅ Returning {len(voice_models)} models to client")
-        return voice_models
+        logger.info(f"🔄 Converting {len(voice_models)} models to VoiceModelPublic...")
+        
+        # VoiceModel 객체들을 VoiceModelPublic으로 변환
+        public_models = []
+        for model in voice_models:
+            try:
+                public_model = VoiceModelPublic.model_validate(model)
+                public_models.append(public_model)
+                logger.info(f"✅ Converted model {model.id}: {model.model_name}")
+            except Exception as e:
+                logger.error(f"❌ Failed to convert model {model.id}: {e}")
+                logger.error(f"📝 Model data: {model.__dict__}")
+                # 422 오류를 피하기 위해 변환 실패한 모델은 건너뛰기
+                continue
+        
+        logger.info(f"✅ Successfully converted {len(public_models)} out of {len(voice_models)} models")
+        return public_models
         
     except Exception as e:
         logger.error(f"💥 ERROR in get_voice_models")
