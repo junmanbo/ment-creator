@@ -32,6 +32,11 @@ class TTSGenerationWithScript(TTSGenerationPublic):
     script: Optional[TTSScriptPublic] = None
     voice_actor_name: Optional[str] = None
 
+# TTS Script with Voice Actor info
+class TTSScriptWithVoiceActor(TTSScriptPublic):
+    voice_actor_name: Optional[str] = None
+    latest_generation: Optional[TTSGenerationPublic] = None
+
 router = APIRouter(prefix="/voice-actors", tags=["voice-actors"])
 
 # 테스트 엔드포인트
@@ -315,6 +320,198 @@ def create_tts_script(
     except Exception as e:
         logger.error(f"❌ Failed to convert TTS script {script.id}: {e}")
         raise HTTPException(status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다.")
+
+@router.get("/tts-scripts", response_model=List[TTSScriptWithVoiceActor])
+def get_tts_scripts(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 20,
+    voice_actor_id: Optional[uuid.UUID] = None,
+    search: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc"
+) -> List[TTSScriptWithVoiceActor]:
+    """TTS 스크립트 목록 조회 (성우 정보 및 최신 생성 결과 포함)"""
+    logger.info(f"🎯 GET /tts-scripts called with filters: voice_actor_id={voice_actor_id}, search={search}")
+    
+    try:
+        # 스크립트와 성우 정보를 함께 조회
+        statement = (
+            select(
+                TTSScript,
+                VoiceActor.name.label("voice_actor_name")
+            )
+            .outerjoin(VoiceActor, TTSScript.voice_actor_id == VoiceActor.id)
+            .where(TTSScript.created_by == current_user.id)
+        )
+        
+        # 필터 적용
+        if voice_actor_id:
+            statement = statement.where(TTSScript.voice_actor_id == voice_actor_id)
+        
+        if search:
+            search_term = f"%{search}%"
+            statement = statement.where(TTSScript.text_content.ilike(search_term))
+        
+        # 정렬
+        if sort_by == "created_at":
+            order_column = TTSScript.created_at
+        elif sort_by == "updated_at":
+            order_column = TTSScript.updated_at
+        elif sort_by == "text_content":
+            order_column = TTSScript.text_content
+        else:
+            order_column = TTSScript.created_at
+        
+        if sort_order == "desc":
+            order_column = order_column.desc()
+        else:
+            order_column = order_column.asc()
+        
+        statement = statement.order_by(order_column).offset(skip).limit(limit)
+        
+        results = session.exec(statement).all()
+        
+        # 각 스크립트에 대해 최신 생성 결과 조회
+        scripts_with_info = []
+        for script, voice_actor_name in results:
+            script_dict = script.model_dump()
+            script_dict["voice_actor_name"] = voice_actor_name
+            
+            # 최신 생성 결과 조회
+            latest_generation_stmt = (
+                select(TTSGeneration)
+                .where(TTSGeneration.script_id == script.id)
+                .order_by(TTSGeneration.created_at.desc())
+                .limit(1)
+            )
+            latest_generation = session.exec(latest_generation_stmt).first()
+            
+            if latest_generation:
+                script_dict["latest_generation"] = latest_generation.model_dump()
+            else:
+                script_dict["latest_generation"] = None
+            
+            scripts_with_info.append(TTSScriptWithVoiceActor(**script_dict))
+        
+        logger.info(f"✅ Successfully retrieved {len(scripts_with_info)} TTS scripts")
+        return scripts_with_info
+        
+    except Exception as e:
+        logger.error(f"💥 ERROR in get_tts_scripts: {e}")
+        raise HTTPException(status_code=500, detail=f"TTS 스크립트 목록 조회 중 오류: {str(e)}")
+
+@router.get("/tts-scripts/{script_id}", response_model=TTSScriptWithVoiceActor)
+def get_tts_script(
+    *,
+    session: SessionDep,
+    script_id: uuid.UUID,
+    current_user: CurrentUser
+) -> TTSScriptWithVoiceActor:
+    """특정 TTS 스크립트 조회"""
+    script = session.get(TTSScript, script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
+    
+    if script.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+    
+    # 성우 정보 조회
+    voice_actor_name = None
+    if script.voice_actor_id:
+        voice_actor = session.get(VoiceActor, script.voice_actor_id)
+        if voice_actor:
+            voice_actor_name = voice_actor.name
+    
+    # 최신 생성 결과 조회
+    latest_generation_stmt = (
+        select(TTSGeneration)
+        .where(TTSGeneration.script_id == script.id)
+        .order_by(TTSGeneration.created_at.desc())
+        .limit(1)
+    )
+    latest_generation = session.exec(latest_generation_stmt).first()
+    
+    script_dict = script.model_dump()
+    script_dict["voice_actor_name"] = voice_actor_name
+    script_dict["latest_generation"] = latest_generation.model_dump() if latest_generation else None
+    
+    return TTSScriptWithVoiceActor(**script_dict)
+
+@router.put("/tts-scripts/{script_id}", response_model=TTSScriptPublic)
+def update_tts_script(
+    *,
+    session: SessionDep,
+    script_id: uuid.UUID,
+    script_in: TTSScriptUpdate,
+    current_user: CurrentUser
+) -> TTSScriptPublic:
+    """TTS 스크립트 수정"""
+    script = session.get(TTSScript, script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
+    
+    if script.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
+    
+    # 성우 존재 확인
+    if script_in.voice_actor_id:
+        voice_actor = session.get(VoiceActor, script_in.voice_actor_id)
+        if not voice_actor:
+            raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
+    
+    update_data = script_in.model_dump(exclude_unset=True)
+    update_data["updated_at"] = datetime.now()
+    script.sqlmodel_update(update_data)
+    
+    session.add(script)
+    session.commit()
+    session.refresh(script)
+    
+    try:
+        return TTSScriptPublic.model_validate(script)
+    except Exception as e:
+        logger.error(f"❌ Failed to convert updated TTS script {script_id}: {e}")
+        raise HTTPException(status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다.")
+
+@router.delete("/tts-scripts/{script_id}")
+def delete_tts_script(
+    *,
+    session: SessionDep,
+    script_id: uuid.UUID,
+    current_user: CurrentUser
+):
+    """TTS 스크립트 삭제"""
+    script = session.get(TTSScript, script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
+    
+    if script.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
+    
+    # 관련된 생성 작업들도 함께 삭제
+    generations = session.exec(
+        select(TTSGeneration).where(TTSGeneration.script_id == script_id)
+    ).all()
+    
+    for generation in generations:
+        # 오디오 파일 삭제
+        if generation.audio_file_path:
+            try:
+                file_path = Path(generation.audio_file_path)
+                if file_path.exists():
+                    file_path.unlink()
+            except Exception as e:
+                logger.warning(f"Failed to delete audio file {generation.audio_file_path}: {e}")
+        
+        session.delete(generation)
+    
+    session.delete(script)
+    session.commit()
+    
+    return {"message": "TTS 스크립트가 삭제되었습니다."}
 
 @router.post("/tts-scripts/{script_id}/generate", response_model=TTSGenerationPublic)
 async def generate_tts(
