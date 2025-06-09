@@ -18,7 +18,7 @@ from app.models.voice_actor import (
     GenderType, AgeRangeType
 )
 from app.models.tts import (
-    TTSScript, TTSScriptCreate, TTSScriptPublic, 
+    TTSScript, TTSScriptCreate, TTSScriptUpdate, TTSScriptPublic, 
     TTSGeneration, TTSGenerateRequest, TTSGenerationPublic,
     TTSLibrary, TTSLibraryCreate, TTSLibraryUpdate, TTSLibraryPublic,
     GenerationStatus
