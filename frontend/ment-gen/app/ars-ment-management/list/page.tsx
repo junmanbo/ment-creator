@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Play, Pause, Volume2, Plus, Search, Filter, Eye, Edit, Trash2, Mic } from "lucide-react"
+import { Loader2, Play, Pause, Volume2, Plus, Search, Filter, Eye, Edit, Trash2, Mic, AlertTriangle, CheckCircle, Server } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
 
 interface VoiceActor {
@@ -45,6 +46,13 @@ interface AudioPlayerState {
   isLoading: boolean
 }
 
+interface ApiDebugInfo {
+  serverStatus: 'checking' | 'connected' | 'disconnected'
+  lastError?: string
+  requestCount: number
+  lastResponseTime?: number
+}
+
 export default function MentListPage() {
   const [scripts, setScripts] = useState<TTSScript[]>([])
   const [voiceActors, setVoiceActors] = useState<VoiceActor[]>([])
@@ -57,6 +65,13 @@ export default function MentListPage() {
   const scriptsPerPage = 10
   const { toast } = useToast()
 
+  // 디버깅 정보 상태
+  const [debugInfo, setDebugInfo] = useState<ApiDebugInfo>({
+    serverStatus: 'checking',
+    requestCount: 0
+  })
+  const [showDebugInfo, setShowDebugInfo] = useState(false)
+
   // 오디오 플레이어 상태
   const [audioState, setAudioState] = useState<AudioPlayerState>({
     scriptId: null,
@@ -65,15 +80,59 @@ export default function MentListPage() {
   })
 
   useEffect(() => {
+    checkServerStatus()
     fetchScripts()
     fetchVoiceActors()
   }, [currentPage, searchTerm, selectedVoiceActor, sortBy, sortOrder])
 
+  // 서버 상태 확인
+  const checkServerStatus = async () => {
+    try {
+      const startTime = Date.now()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/test`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      const responseTime = Date.now() - startTime
+      
+      if (response.ok) {
+        setDebugInfo(prev => ({
+          ...prev,
+          serverStatus: 'connected',
+          lastResponseTime: responseTime,
+          lastError: undefined
+        }))
+      } else {
+        setDebugInfo(prev => ({
+          ...prev,
+          serverStatus: 'disconnected',
+          lastError: `HTTP ${response.status}: ${response.statusText}`
+        }))
+      }
+    } catch (error) {
+      setDebugInfo(prev => ({
+        ...prev,
+        serverStatus: 'disconnected',
+        lastError: error instanceof Error ? error.message : 'Unknown error'
+      }))
+    }
+  }
+
   const fetchScripts = async () => {
     setIsLoading(true)
+    const startTime = Date.now()
+    
     try {
       const accessToken = localStorage.getItem("access_token")
+      console.log("🔍 fetchScripts 시작")
+      console.log("📍 API URL:", `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts`)
+      console.log("🔑 토큰 존재:", !!accessToken)
+      
       if (!accessToken) {
+        console.error("❌ 액세스 토큰이 없습니다")
         toast({
           title: "인증 오류",
           description: "로그인이 필요합니다.",
@@ -97,19 +156,48 @@ export default function MentListPage() {
         params.append("voice_actor_id", selectedVoiceActor)
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/tts-scripts?${params}`
+      console.log("🌐 요청 URL:", url)
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const responseTime = Date.now() - startTime
+      console.log(`⏱️ 응답 시간: ${responseTime}ms`)
+      console.log("📡 응답 상태:", response.status, response.statusText)
+
+      // 디버그 정보 업데이트
+      setDebugInfo(prev => ({
+        ...prev,
+        requestCount: prev.requestCount + 1,
+        lastResponseTime: responseTime,
+        serverStatus: response.ok ? 'connected' : 'disconnected'
+      }))
 
       if (response.ok) {
         const data: TTSScript[] = await response.json()
+        console.log("✅ 응답 데이터:", data)
+        console.log("📊 스크립트 개수:", data.length)
+        
         setScripts(data)
+        
+        if (data.length === 0) {
+          console.log("ℹ️ TTS 스크립트가 없습니다. 샘플 데이터 생성을 제안합니다.")
+          setShowDebugInfo(true)
+        }
       } else {
+        const errorText = await response.text()
+        console.error("❌ API 응답 오류:", errorText)
+        
+        setDebugInfo(prev => ({
+          ...prev,
+          lastError: `HTTP ${response.status}: ${errorText}`
+        }))
+
         if (response.status === 401) {
           toast({
             title: "인증 오류",
@@ -119,18 +207,29 @@ export default function MentListPage() {
         } else {
           toast({
             title: "데이터 로드 실패",
-            description: "TTS 스크립트 목록을 불러오는데 실패했습니다.",
+            description: `서버 오류 (${response.status}): TTS 스크립트 목록을 불러올 수 없습니다.`,
             variant: "destructive",
           })
         }
       }
     } catch (error) {
-      console.error("Fetch scripts error:", error)
+      const responseTime = Date.now() - startTime
+      console.error("💥 fetchScripts 에러:", error)
+      
+      setDebugInfo(prev => ({
+        ...prev,
+        requestCount: prev.requestCount + 1,
+        lastResponseTime: responseTime,
+        serverStatus: 'disconnected',
+        lastError: error instanceof Error ? error.message : 'Network error'
+      }))
+
       toast({
         title: "네트워크 오류",
-        description: "서버와의 연결에 문제가 있습니다.",
+        description: `서버와의 연결에 문제가 있습니다: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       })
+      setShowDebugInfo(true)
     } finally {
       setIsLoading(false)
     }
@@ -141,6 +240,7 @@ export default function MentListPage() {
       const accessToken = localStorage.getItem("access_token")
       if (!accessToken) return
 
+      console.log("🎭 성우 목록 조회 시작")
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -149,10 +249,68 @@ export default function MentListPage() {
 
       if (response.ok) {
         const data: VoiceActor[] = await response.json()
+        console.log("✅ 성우 목록:", data)
         setVoiceActors(data)
+      } else {
+        console.error("❌ 성우 목록 조회 실패:", response.status)
       }
     } catch (error) {
-      console.error("Fetch voice actors error:", error)
+      console.error("💥 fetchVoiceActors 에러:", error)
+    }
+  }
+
+  // 샘플 데이터 생성
+  const createSampleData = async () => {
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      if (!accessToken) {
+        toast({
+          title: "인증 오류",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      console.log("🛠️ 샘플 데이터 생성 시작")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/create-sample-data`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log("✅ 샘플 데이터 생성 결과:", result)
+        
+        toast({
+          title: "샘플 데이터 생성 완료",
+          description: "페이지를 새로고침합니다.",
+        })
+        
+        // 데이터 다시 로드
+        setTimeout(() => {
+          fetchScripts()
+          fetchVoiceActors()
+        }, 1000)
+      } else {
+        const errorText = await response.text()
+        console.error("❌ 샘플 데이터 생성 실패:", errorText)
+        toast({
+          title: "샘플 데이터 생성 실패",
+          description: "서버 오류가 발생했습니다.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("💥 createSampleData 에러:", error)
+      toast({
+        title: "네트워크 오류",
+        description: "서버와의 연결에 문제가 있습니다.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -354,6 +512,81 @@ export default function MentListPage() {
 
   return (
     <div className="container mx-auto p-4">
+      {/* 서버 상태 표시 */}
+      <div className="mb-4">
+        <Alert className={debugInfo.serverStatus === 'connected' ? 'border-green-200 bg-green-50' : 
+                       debugInfo.serverStatus === 'disconnected' ? 'border-red-200 bg-red-50' : 
+                       'border-yellow-200 bg-yellow-50'}>
+          <div className="flex items-center gap-2">
+            {debugInfo.serverStatus === 'connected' ? (
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            ) : debugInfo.serverStatus === 'disconnected' ? (
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+            ) : (
+              <Loader2 className="h-4 w-4 animate-spin text-yellow-600" />
+            )}
+            <AlertDescription>
+              서버 상태: {debugInfo.serverStatus === 'connected' ? '연결됨' : 
+                        debugInfo.serverStatus === 'disconnected' ? '연결 실패' : '확인 중...'}
+              {debugInfo.lastResponseTime && ` (${debugInfo.lastResponseTime}ms)`}
+              {debugInfo.lastError && ` - ${debugInfo.lastError}`}
+            </AlertDescription>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowDebugInfo(!showDebugInfo)}
+              className="ml-auto"
+            >
+              <Server className="h-4 w-4 mr-2" />
+              디버그 정보
+            </Button>
+          </div>
+        </Alert>
+      </div>
+
+      {/* 디버그 정보 */}
+      {showDebugInfo && (
+        <Card className="mb-6 border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="text-lg">🔧 디버그 정보</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <strong>API Base URL:</strong><br />
+                {process.env.NEXT_PUBLIC_API_BASE_URL}
+              </div>
+              <div>
+                <strong>요청 횟수:</strong><br />
+                {debugInfo.requestCount}회
+              </div>
+              <div>
+                <strong>마지막 응답 시간:</strong><br />
+                {debugInfo.lastResponseTime ? `${debugInfo.lastResponseTime}ms` : '없음'}
+              </div>
+              <div>
+                <strong>성우 수:</strong><br />
+                {voiceActors.length}명
+              </div>
+            </div>
+            {debugInfo.lastError && (
+              <div className="mt-4 p-3 bg-red-100 rounded">
+                <strong>마지막 오류:</strong><br />
+                {debugInfo.lastError}
+              </div>
+            )}
+            <div className="mt-4 flex gap-2">
+              <Button size="sm" onClick={checkServerStatus}>
+                서버 상태 재확인
+              </Button>
+              <Button size="sm" onClick={createSampleData} variant="outline">
+                샘플 데이터 생성
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* 헤더 */}
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -428,14 +661,20 @@ export default function MentListPage() {
           <div className="text-gray-500 mb-4">
             <Mic className="h-12 w-12 mx-auto mb-2 opacity-50" />
             <p>등록된 TTS 스크립트가 없습니다.</p>
-            <p className="text-sm">새로운 멘트를 생성해보세요.</p>
+            <p className="text-sm">새로운 멘트를 생성하거나 샘플 데이터를 추가해보세요.</p>
           </div>
-          <Link href="/ars-ment-management/tts">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              첫 번째 멘트 생성하기
+          <div className="flex justify-center gap-2">
+            <Link href="/ars-ment-management/tts">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                첫 번째 멘트 생성하기
+              </Button>
+            </Link>
+            <Button variant="outline" onClick={createSampleData}>
+              <Server className="h-4 w-4 mr-2" />
+              샘플 데이터 생성
             </Button>
-          </Link>
+          </div>
         </div>
       ) : (
         <>
