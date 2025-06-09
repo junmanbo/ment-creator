@@ -55,8 +55,8 @@ export default function TTSLibraryPage() {
   
   // 검색 및 필터 상태
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<string>("")
-  const [isPublicFilter, setIsPublicFilter] = useState<string>("")
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [isPublicFilter, setIsPublicFilter] = useState<string>("all")
   
   // 새 라이브러리 아이템 생성 상태
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -65,7 +65,7 @@ export default function TTSLibraryPage() {
     text_content: "",
     category: "",
     tags: "",
-    voice_actor_id: "",
+    voice_actor_id: "none",
     is_public: false
   })
   const [isCreating, setIsCreating] = useState(false)
@@ -93,11 +93,11 @@ export default function TTSLibraryPage() {
         params.append("search", searchTerm.trim())
       }
 
-      if (selectedCategory) {
+      if (selectedCategory && selectedCategory !== "all") {
         params.append("category", selectedCategory)
       }
 
-      if (isPublicFilter !== "") {
+      if (isPublicFilter !== "all") {
         params.append("is_public", isPublicFilter)
       }
 
@@ -194,7 +194,7 @@ export default function TTSLibraryPage() {
           },
           body: JSON.stringify({
             ...newItem,
-            voice_actor_id: newItem.voice_actor_id || null
+            voice_actor_id: newItem.voice_actor_id === "none" ? null : newItem.voice_actor_id
           }),
         }
       )
@@ -208,7 +208,7 @@ export default function TTSLibraryPage() {
           text_content: "",
           category: "",
           tags: "",
-          voice_actor_id: "",
+          voice_actor_id: "none",
           is_public: false
         })
         toast({
@@ -417,7 +417,7 @@ export default function TTSLibraryPage() {
                       <SelectValue placeholder="성우 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">선택 안함</SelectItem>
+                      <SelectItem value="none">선택 안함</SelectItem>
                       {voiceActors.map((actor) => (
                         <SelectItem key={actor.id} value={actor.id}>
                           {actor.name}
@@ -488,7 +488,7 @@ export default function TTSLibraryPage() {
               <SelectValue placeholder="카테고리" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">전체 카테고리</SelectItem>
+              <SelectItem value="all">전체 카테고리</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category} value={category}>
                   {category}
@@ -501,7 +501,7 @@ export default function TTSLibraryPage() {
               <SelectValue placeholder="공개여부" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">전체</SelectItem>
+              <SelectItem value="all">전체</SelectItem>
               <SelectItem value="true">공개</SelectItem>
               <SelectItem value="false">비공개</SelectItem>
             </SelectContent>

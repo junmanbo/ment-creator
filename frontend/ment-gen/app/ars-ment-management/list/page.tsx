@@ -51,7 +51,7 @@ export default function MentListPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedVoiceActor, setSelectedVoiceActor] = useState<string>("")
+  const [selectedVoiceActor, setSelectedVoiceActor] = useState<string>("all")
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
   const scriptsPerPage = 10
@@ -93,7 +93,7 @@ export default function MentListPage() {
         params.append("search", searchTerm.trim())
       }
 
-      if (selectedVoiceActor) {
+      if (selectedVoiceActor && selectedVoiceActor !== "all") {
         params.append("voice_actor_id", selectedVoiceActor)
       }
 
@@ -387,7 +387,7 @@ export default function MentListPage() {
               <SelectValue placeholder="성우 선택" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">전체 성우</SelectItem>
+              <SelectItem value="all">전체 성우</SelectItem>
               {voiceActors.map((actor) => (
                 <SelectItem key={actor.id} value={actor.id}>
                   {actor.name}
