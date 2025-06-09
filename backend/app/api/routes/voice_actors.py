@@ -1029,3 +1029,188 @@ def test_voice_actors_api():
             "debug_fix": "/voice-actors/debug/fix-issues"
         }
     }
+
+@router.get("/db-status")
+def check_database_status(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser
+):
+    """데이터베이스 상태 확인"""
+    logger.info(f"🔍 Database status check requested by user {current_user.id}")
+    
+    try:
+        # 각 테이블의 레코드 수 확인
+        from app.models.users import User
+        
+        users_count = len(session.exec(select(User)).all())
+        voice_actors_count = len(session.exec(select(VoiceActor)).all())
+        tts_scripts_count = len(session.exec(select(TTSScript)).all())
+        tts_generations_count = len(session.exec(select(TTSGeneration)).all())
+        
+        # 현재 사용자의 TTS 스크립트 조회
+        user_scripts = session.exec(
+            select(TTSScript)
+            .where(TTSScript.created_by == current_user.id)
+            .order_by(TTSScript.created_at.desc())
+            .limit(5)
+        ).all()
+        
+        user_scripts_data = []
+        for script in user_scripts:
+            user_scripts_data.append({
+                "id": str(script.id),
+                "text_content": script.text_content[:100] + "..." if len(script.text_content) > 100 else script.text_content,
+                "created_at": script.created_at.isoformat(),
+                "voice_actor_id": str(script.voice_actor_id) if script.voice_actor_id else None
+            })
+        
+        # 성우 목록 조회
+        voice_actors = session.exec(select(VoiceActor).limit(10)).all()
+        voice_actors_data = []
+        for actor in voice_actors:
+            voice_actors_data.append({
+                "id": str(actor.id),
+                "name": actor.name,
+                "gender": actor.gender,
+                "age_range": actor.age_range,
+                "is_active": actor.is_active
+            })
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "database_counts": {
+                "users": users_count,
+                "voice_actors": voice_actors_count,
+                "tts_scripts": tts_scripts_count,
+                "tts_generations": tts_generations_count
+            },
+            "current_user": {
+                "id": str(current_user.id),
+                "email": current_user.email,
+                "scripts_count": len(user_scripts)
+            },
+            "user_scripts": user_scripts_data,
+            "voice_actors": voice_actors_data
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Database status check failed: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+@router.post("/create-sample-data")
+def create_sample_data(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser
+):
+    """샘플 데이터 생성"""
+    logger.info(f"🛠️ Sample data creation requested by user {current_user.id}")
+    
+    try:
+        created_items = []
+        
+        # 샘플 성우 생성
+        sample_actor_data = {
+            "name": "김서연",
+            "gender": "female",
+            "age_range": "30s",
+            "language": "ko",
+            "description": "친근하고 따뜻한 목소리의 전문 성우",
+            "characteristics": {"tone": "친근함", "style": "밝음", "specialty": "보험업계"},
+            "is_active": True,
+            "created_by": current_user.id
+        }
+        
+        existing_actor = session.exec(
+            select(VoiceActor).where(VoiceActor.name == sample_actor_data["name"])
+        ).first()
+        
+        if not existing_actor:
+            from app.models.voice_actor import GenderType, AgeRangeType
+            sample_actor = VoiceActor(
+                name=sample_actor_data["name"],
+                gender=GenderType.FEMALE,
+                age_range=AgeRangeType.THIRTIES,
+                language=sample_actor_data["language"],
+                description=sample_actor_data["description"],
+                characteristics=sample_actor_data["characteristics"],
+                is_active=sample_actor_data["is_active"],
+                created_by=current_user.id
+            )
+            session.add(sample_actor)
+            session.commit()
+            session.refresh(sample_actor)
+            created_items.append(f"성우: {sample_actor.name}")
+        else:
+            sample_actor = existing_actor
+            created_items.append(f"기존 성우 사용: {sample_actor.name}")
+        
+        # 샘플 TTS 스크립트들 생성
+        sample_scripts = [
+            {
+                "text_content": "안녕하세요. OO손해보험 고객센터입니다. 무엇을 도와드릴까요?",
+                "voice_settings": {"speed": 1.0, "tone": "friendly", "emotion": "bright"}
+            },
+            {
+                "text_content": "메뉴를 선택해 주세요. 1번 자동차보험, 2번 화재보험, 9번 상담원 연결입니다.",
+                "voice_settings": {"speed": 0.9, "tone": "clear", "emotion": "neutral"}
+            },
+            {
+                "text_content": "상담원에게 연결해 드리겠습니다. 잠시만 기다려 주세요.",
+                "voice_settings": {"speed": 1.0, "tone": "polite", "emotion": "calm"}
+            },
+            {
+                "text_content": "감사합니다. 좋은 하루 되세요.",
+                "voice_settings": {"speed": 1.0, "tone": "warm", "emotion": "bright"}
+            }
+        ]
+        
+        scripts_created = 0
+        for script_data in sample_scripts:
+            existing_script = session.exec(
+                select(TTSScript).where(
+                    TTSScript.text_content == script_data["text_content"]
+                ).where(
+                    TTSScript.created_by == current_user.id
+                )
+            ).first()
+            
+            if not existing_script:
+                new_script = TTSScript(
+                    text_content=script_data["text_content"],
+                    voice_actor_id=sample_actor.id,
+                    voice_settings=script_data["voice_settings"],
+                    created_by=current_user.id
+                )
+                session.add(new_script)
+                scripts_created += 1
+        
+        if scripts_created > 0:
+            session.commit()
+            created_items.append(f"TTS 스크립트 {scripts_created}개")
+        else:
+            created_items.append("TTS 스크립트 (이미 존재함)")
+        
+        return {
+            "status": "success",
+            "message": "샘플 데이터 생성 완료",
+            "timestamp": datetime.now().isoformat(),
+            "created_items": created_items
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Sample data creation failed: {e}")
+        return {
+            "status": "error",
+            "message": "샘플 데이터 생성 실패",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
