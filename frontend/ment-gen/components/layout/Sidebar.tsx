@@ -69,15 +69,32 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    title: "성우 관리",
-    href: "/voice-actors",
+    title: "ARS 멘트 관리",
+    href: "/ars-ment-management",
     icon: Mic,
     badge: "8",
-  },
-  {
-    title: "멘트 목록",
-    href: "/list",
-    icon: FileText,
+    children: [
+      {
+        title: "멘트 목록",
+        href: "/ars-ment-management/list",
+        icon: FileText,
+      },
+      {
+        title: "성우 관리",
+        href: "/ars-ment-management/voice-actors",
+        icon: Users,
+      },
+      {
+        title: "TTS 생성",
+        href: "/ars-ment-management/tts",
+        icon: Volume2,
+      },
+      {
+        title: "음성 라이브러리",
+        href: "/ars-ment-management/library",
+        icon: Database,
+      },
+    ],
   },
   {
     title: "시스템 모니터링",
