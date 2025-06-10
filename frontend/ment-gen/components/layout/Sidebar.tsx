@@ -90,6 +90,13 @@ const menuItems: MenuItem[] = [
         icon: Volume2,
       },
       {
+        title: "TTS 테스트",
+        href: "/tts-test",
+        icon: Activity,
+        badge: "NEW",
+        badgeVariant: "destructive" as const,
+      },
+      {
         title: "음성 라이브러리",
         href: "/ars-ment-management/library",
         icon: Database,

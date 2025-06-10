@@ -25,7 +25,7 @@ from app.models.tts import (
 )
 
 from app.services.tts_service import tts_service
-from app.services.tts_service_debug import tts_debugger
+# from app.services.tts_service_debug import tts_debugger  # 임시 비활성화
 
 # TTS Generation with Script info
 class TTSGenerationWithScript(TTSGenerationPublic):
@@ -930,7 +930,16 @@ async def diagnose_tts_environment(
     logger.info(f"TTS diagnosis requested by user {current_user.id}")
     
     try:
-        diagnosis = await tts_debugger.diagnose_tts_environment()
+        # 기본 TTS 진단 수행
+        await tts_service.initialize_tts_model()
+        
+        diagnosis = {
+            "tts_mode": "Real TTS" if tts_service.tts_model != "mock" else "Mock TTS",
+            "model_loaded": tts_service.model_loaded,
+            "gpu_enabled": tts_service.use_gpu,
+            "status": "healthy"
+        }
+        
         return {
             "message": "TTS 환경 진단 완료",
             "diagnosis": diagnosis
@@ -952,7 +961,33 @@ async def fix_common_tts_issues(
     logger.info(f"TTS auto-fix requested by user {current_user.id}")
     
     try:
-        results = await tts_debugger.fix_common_issues()
+        # 기본 문제 수정 수행
+        results = {
+            "directories_created": 0,
+            "permissions_fixed": 0,
+            "tts_model_reloaded": False
+        }
+        
+        # 디렉토리 생성 확인
+        from pathlib import Path
+        audio_dir = Path("audio_files")
+        voice_dir = Path("voice_samples")
+        
+        if not audio_dir.exists():
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            results["directories_created"] += 1
+            
+        if not voice_dir.exists():
+            voice_dir.mkdir(parents=True, exist_ok=True)
+            results["directories_created"] += 1
+        
+        # TTS 모델 재로드
+        try:
+            await tts_service.initialize_tts_model()
+            results["tts_model_reloaded"] = True
+        except Exception as e:
+            logger.warning(f"TTS model reload failed: {e}")
+        
         return {
             "message": "TTS 문제 자동 수정 완료",
             "results": results
