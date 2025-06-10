@@ -27,33 +27,27 @@ class TTSService:
         self.use_gpu = False
         
     async def initialize_tts_model(self):
-        """TTS 모델 초기화 (지연 로딩) - 개선된 버전"""
+        """TTS 모델 초기화 (지연 로딩)"""
         if self.model_loaded:
             return
             
         logger.info("TTS 모델 초기화 시작...")
         
         try:
-            # 1. 기본 라이브러리 확인
-            logger.info("필수 라이브러리 확인 중...")
+            # 1. PyTorch 확인
+            logger.info("PyTorch 가용성 확인 중...")
+            import torch
+            self.use_gpu = torch.cuda.is_available()
+            logger.info(f"PyTorch: {torch.__version__}, GPU: {self.use_gpu}")
             
-            try:
-                import torch
-                self.use_gpu = torch.cuda.is_available()
-                logger.info(f"PyTorch: {torch.__version__}, GPU: {self.use_gpu}")
-                
-                if self.use_gpu:
-                    logger.info(f"사용 가능한 GPU: {torch.cuda.device_count()}개")
-                    for i in range(torch.cuda.device_count()):
-                        gpu_name = torch.cuda.get_device_name(i)
-                        memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
-                        logger.info(f"  GPU {i}: {gpu_name} ({memory:.1f}GB)")
-                else:
-                    logger.info("GPU를 사용할 수 없습니다. CPU 모드로 진행합니다.")
-                    
-            except ImportError as e:
-                logger.warning(f"PyTorch 가져오기 실패: {e}")
-                self.use_gpu = False
+            if self.use_gpu:
+                logger.info(f"사용 가능한 GPU: {torch.cuda.device_count()}개")
+                for i in range(torch.cuda.device_count()):
+                    gpu_name = torch.cuda.get_device_name(i)
+                    memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+                    logger.info(f"  GPU {i}: {gpu_name} ({memory:.1f}GB)")
+            else:
+                logger.info("GPU를 사용할 수 없습니다. CPU 모드로 진행합니다.")
             
             # 2. TTS 라이브러리 import
             logger.info("Coqui TTS 라이브러리 로딩 중...")
@@ -105,28 +99,19 @@ class TTSService:
                 
             except asyncio.TimeoutError:
                 logger.error("TTS 모델 로딩 타임아웃 (5분)")
-                raise Exception("모델 로딩 시간이 초과되었습니다")
+                raise Exception("모델 로딩 시간이 초과되었습니다. 네트워크 연결을 확인하거나 나중에 다시 시도해주세요.")
             except Exception as e:
                 logger.error(f"TTS 모델 로딩 중 오류 발생: {e}")
-                raise
+                raise Exception(f"TTS 모델 로딩 실패: {str(e)}")
                 
         except ImportError as e:
-            logger.warning(f"TTS 라이브러리를 사용할 수 없습니다: {e}")
-            logger.warning("Mock TTS 모드로 전환합니다")
-            self.tts_model = "mock"
-            self.model_loaded = True
+            error_msg = f"TTS 라이브러리가 설치되지 않았습니다: {e}"
+            logger.error(error_msg)
+            raise Exception(f"{error_msg}\n\n설치 방법:\npip install TTS torch torchaudio")
             
         except Exception as e:
             logger.error(f"TTS 초기화 실패: {e}")
-            logger.warning("Mock TTS 모드로 fallback합니다")
-            self.tts_model = "mock"
-            self.model_loaded = True
-            
-        # 최종 상태 로깅
-        if self.tts_model == "mock":
-            logger.warning("🤖 Mock TTS 모드 - 개발/테스트용 음성 생성")
-        else:
-            logger.info("🎙️ 실제 TTS 모드 - Coqui XTTS v2 사용")
+            raise Exception(f"TTS 시스템 초기화에 실패했습니다: {str(e)}")
     
     async def process_tts_generation(self, generation_id: uuid.UUID) -> None:
         """백그라운드에서 TTS 생성 작업을 처리"""
@@ -213,7 +198,7 @@ class TTSService:
         generation_params: dict,
         session: Session
     ) -> str:
-        """실제 TTS 오디오 생성 - 개선된 버전"""
+        """실제 TTS 오디오 생성"""
         await self.initialize_tts_model()
         
         # 출력 파일 경로 생성
@@ -222,43 +207,38 @@ class TTSService:
         
         logger.info(f"TTS 생성 시작: '{text[:50]}...'")
         
-        if self.tts_model == "mock":
-            # 개선된 Mock TTS
-            logger.info("Mock TTS로 음성 생성")
-            await self._create_realistic_mock_audio(str(output_path), text, voice_actor)
-        else:
+        try:
             # 실제 TTS 생성
-            try:
-                logger.info("실제 TTS로 음성 생성")
+            logger.info("실제 TTS로 음성 생성")
+            
+            if voice_actor and session:
+                # Voice Cloning 사용
+                logger.info(f"Voice Cloning 모드: {voice_actor.name}")
+                reference_wavs = await self._get_reference_wavs(voice_actor, session)
                 
-                if voice_actor and session:
-                    # Voice Cloning 사용
-                    logger.info(f"Voice Cloning 모드: {voice_actor.name}")
-                    reference_wavs = await self._get_reference_wavs(voice_actor, session)
-                    
-                    if reference_wavs:
-                        logger.info(f"참조 음성 파일: {len(reference_wavs)}개")
-                        await self._generate_with_voice_cloning(
-                            text, reference_wavs, str(output_path), generation_params
-                        )
-                    else:
-                        logger.warning(f"{voice_actor.name}의 참조 음성이 없습니다. 기본 음성 사용")
-                        await self._generate_with_default_voice(
-                            text, str(output_path), generation_params
-                        )
+                if reference_wavs:
+                    logger.info(f"참조 음성 파일: {len(reference_wavs)}개")
+                    await self._generate_with_voice_cloning(
+                        text, reference_wavs, str(output_path), generation_params
+                    )
                 else:
-                    # 기본 음성 사용
-                    logger.info("기본 음성으로 생성")
+                    logger.warning(f"{voice_actor.name}의 참조 음성이 없습니다. 기본 음성 사용")
                     await self._generate_with_default_voice(
                         text, str(output_path), generation_params
                     )
-                
-                logger.info(f"실제 TTS 생성 완료: {output_path}")
-                
-            except Exception as e:
-                logger.error(f"실제 TTS 생성 실패: {type(e).__name__}: {str(e)}")
-                logger.warning("Mock TTS로 fallback")
-                await self._create_realistic_mock_audio(str(output_path), text, voice_actor)
+            else:
+                # 기본 음성 사용
+                logger.info("기본 음성으로 생성")
+                await self._generate_with_default_voice(
+                    text, str(output_path), generation_params
+                )
+            
+            logger.info(f"실제 TTS 생성 완료: {output_path}")
+            
+        except Exception as e:
+            logger.error(f"실제 TTS 생성 실패: {type(e).__name__}: {str(e)}")
+            # Mock으로 fallback하지 않고 에러를 그대로 전달
+            raise Exception(f"TTS 음성 생성에 실패했습니다: {str(e)}")
         
         return str(output_path)
     
@@ -294,7 +274,7 @@ class TTSService:
         output_path: str, 
         params: dict
     ):
-        """Voice Cloning을 사용한 TTS 생성 - 개선된 버전"""
+        """Voice Cloning을 사용한 TTS 생성"""
         try:
             logger.info(f"Voice Cloning 시작: {len(reference_wavs)}개 참조 음성 사용")
             
@@ -329,10 +309,10 @@ class TTSService:
             
         except asyncio.TimeoutError:
             logger.error("Voice Cloning 타임아웃")
-            raise Exception("음성 생성 시간이 초과되었습니다")
+            raise Exception("음성 생성 시간이 초과되었습니다 (2분)")
         except Exception as e:
             logger.error(f"Voice Cloning 실패: {e}")
-            raise
+            raise Exception(f"Voice Cloning 실패: {str(e)}")
     
     async def _generate_with_default_voice(
         self, 
@@ -340,7 +320,7 @@ class TTSService:
         output_path: str, 
         params: dict
     ):
-        """기본 음성을 사용한 TTS 생성 - 개선된 버전"""
+        """기본 음성을 사용한 TTS 생성"""
         try:
             logger.info("기본 음성으로 TTS 생성")
             
@@ -352,9 +332,10 @@ class TTSService:
                     "file_path": output_path,
                     "language": "ko",
                     "split_sentences": True,
-                    **params
+                    **{k: v for k, v in params.items() if k in ['temperature', 'length_penalty', 'repetition_penalty']}
                 }
                 
+                logger.info(f"기본 TTS 매개변수: {tts_params}")
                 self.tts_model.tts_to_file(**tts_params)
             
             await asyncio.wait_for(
@@ -366,152 +347,10 @@ class TTSService:
             
         except asyncio.TimeoutError:
             logger.error("기본 TTS 타임아웃")
-            raise Exception("음성 생성 시간이 초과되었습니다")
+            raise Exception("음성 생성 시간이 초과되었습니다 (1분)")
         except Exception as e:
             logger.error(f"기본 TTS 실패: {e}")
-            raise
-    
-    async def _create_realistic_mock_audio(self, output_path: str, text: str, voice_actor: Optional[VoiceActor]):
-        """현실적인 Mock 오디오 파일 생성 - 한국어 음성 시뮬레이션"""
-        import wave
-        import numpy as np
-        import random
-        
-        logger.info(f"현실적인 Mock TTS 생성: '{text[:30]}...'")
-        
-        # 텍스트 분석 기반 duration 계산
-        char_count = len(text)
-        word_count = len(text.split())
-        
-        # 한국어 읽기 속도: 분당 300-400자
-        reading_speed = 350 / 60  # 초당 약 5.8자
-        base_duration = char_count / reading_speed
-        
-        # 구두점과 쉼표에 따른 추가 시간
-        pause_chars = text.count(',') + text.count('.') + text.count('?') + text.count('!')
-        pause_time = pause_chars * 0.3  # 구두점마다 0.3초 추가
-        
-        total_duration = max(2.0, base_duration + pause_time)
-        
-        sample_rate = 22050
-        samples = int(sample_rate * total_duration)
-        time = np.linspace(0, total_duration, samples)
-        
-        # 성우별 특성 반영
-        base_freq = 180  # 기본 주파수
-        if voice_actor:
-            if voice_actor.gender == "female":
-                base_freq = 220  # 여성 음성
-            elif voice_actor.gender == "male":
-                base_freq = 150  # 남성 음성
-            
-            # 연령대별 조정
-            if voice_actor.age_range == "20s":
-                base_freq += 20
-            elif voice_actor.age_range == "40s":
-                base_freq -= 20
-            elif voice_actor.age_range == "50s":
-                base_freq -= 30
-        
-        # 복합 주파수로 자연스러운 음성 시뮬레이션
-        frequencies = [
-            base_freq,           # 기본 주파수
-            base_freq * 1.2,     # 배음 1
-            base_freq * 1.5,     # 배음 2
-            base_freq * 2.0,     # 배음 3
-        ]
-        
-        weights = [1.0, 0.6, 0.4, 0.2]  # 주파수별 가중치
-        
-        # 기본 신호 생성
-        wave_data = np.zeros(samples)
-        for freq, weight in zip(frequencies, weights):
-            # 주파수 변조로 자연스러운 억양 효과
-            modulation = 1 + 0.15 * np.sin(2 * np.pi * 1.5 * time)  # 1.5Hz 억양 변조
-            component = np.sin(2 * np.pi * freq * time * modulation)
-            wave_data += component * weight
-        
-        # 포먼트 시뮬레이션 (모음 특성)
-        # 한국어 모음의 특성을 반영한 필터링
-        formant_freq = base_freq * 3.5  # 첫 번째 포먼트
-        formant_component = np.sin(2 * np.pi * formant_freq * time) * 0.3
-        wave_data += formant_component
-        
-        # 말하는 리듬 시뮬레이션
-        syllable_count = char_count * 0.8  # 한국어 음절 추정
-        syllable_rate = syllable_count / total_duration
-        
-        # 음절별 강세 패턴
-        syllable_pattern = np.sin(2 * np.pi * syllable_rate * time) * 0.2 + 1
-        wave_data *= syllable_pattern
-        
-        # 자연스러운 엔벨로프 (페이드 인/아웃)
-        envelope = np.ones_like(time)
-        fade_duration = min(0.2, total_duration * 0.05)  # 5% 또는 0.2초
-        fade_samples = int(fade_duration * sample_rate)
-        
-        if fade_samples > 0:
-            # 부드러운 페이드 인/아웃
-            fade_in = np.sin(np.linspace(0, np.pi/2, fade_samples))**2
-            fade_out = np.cos(np.linspace(0, np.pi/2, fade_samples))**2
-            
-            envelope[:fade_samples] = fade_in
-            envelope[-fade_samples:] = fade_out
-        
-        wave_data *= envelope
-        
-        # 단어 간 자연스러운 멈춤
-        if word_count > 2:
-            words_per_second = word_count / total_duration
-            for i in range(1, word_count):
-                # 단어 경계에서 약간의 볼륨 감소
-                word_boundary = int(samples * i / word_count)
-                pause_range = int(sample_rate * 0.05)  # 50ms 범위
-                
-                start_idx = max(0, word_boundary - pause_range)
-                end_idx = min(samples, word_boundary + pause_range)
-                
-                # 완전 무음이 아닌 볼륨 감소
-                wave_data[start_idx:end_idx] *= 0.7
-        
-        # 자연스러운 노이즈 추가 (호흡음, 미세한 배경음)
-        noise_level = 0.005
-        natural_noise = np.random.normal(0, noise_level, samples)
-        
-        # 낮은 주파수 노이즈 (호흡음 시뮬레이션)
-        breath_freq = 20  # 20Hz
-        breath_noise = np.sin(2 * np.pi * breath_freq * time) * noise_level * 0.5
-        
-        wave_data += natural_noise + breath_noise
-        
-        # 정규화 및 클리핑 방지
-        max_amplitude = np.max(np.abs(wave_data))
-        if max_amplitude > 0:
-            wave_data = wave_data / max_amplitude * 0.8  # 80% 볼륨
-        
-        # 16비트 변환
-        wave_data = (wave_data * 32767).astype(np.int16)
-        
-        # WAV 파일 저장
-        try:
-            with wave.open(output_path, 'w') as wav_file:
-                wav_file.setnchannels(1)  # 모노
-                wav_file.setsampwidth(2)  # 16-bit
-                wav_file.setframerate(sample_rate)
-                wav_file.writeframes(wave_data.tobytes())
-            
-            logger.info(f"✅ 현실적인 Mock TTS 완료")
-            logger.info(f"   길이: {total_duration:.2f}초")
-            logger.info(f"   기본 주파수: {base_freq}Hz")
-            logger.info(f"   단어 수: {word_count}개")
-            
-        except Exception as e:
-            logger.error(f"Mock 오디오 파일 저장 실패: {e}")
-            raise
-        
-        # 실제 TTS 처리 시간 시뮬레이션
-        processing_time = min(5.0, max(1.0, total_duration * 0.3))
-        await asyncio.sleep(processing_time)
+            raise Exception(f"기본 TTS 실패: {str(e)}")
     
     async def _get_audio_duration(self, audio_file_path: str) -> float:
         """오디오 파일의 정확한 길이를 계산"""
@@ -552,7 +391,7 @@ class TTSService:
         text: str, 
         is_voice_cloning: bool = False
     ) -> float:
-        """TTS 품질 점수 계산 - 개선된 버전"""
+        """TTS 품질 점수 계산"""
         try:
             if not Path(audio_file_path).exists():
                 return 0.0
@@ -561,7 +400,7 @@ class TTSService:
             duration = await self._get_audio_duration(audio_file_path)
             
             # 기본 점수 계산
-            base_score = 70.0
+            base_score = 85.0  # 실제 TTS는 85점부터 시작
             
             # 파일 크기 점수 (너무 작거나 큰 파일은 품질이 낮을 가능성)
             size_score = 0
@@ -582,22 +421,18 @@ class TTSService:
                 duration_score = 0
             
             # Voice Cloning 보너스
-            voice_cloning_bonus = 10 if is_voice_cloning else 0
+            voice_cloning_bonus = 5 if is_voice_cloning else 0
             
             # 텍스트 복잡도 점수
             complexity_score = min(5, len(text) / 20)
             
             total_score = base_score + size_score + duration_score + voice_cloning_bonus + complexity_score
             
-            # Mock TTS 점수 조정
-            if self.tts_model == "mock":
-                total_score *= 0.8  # Mock은 80% 점수
-            
             return min(100.0, max(0.0, total_score))
             
         except Exception as e:
             logger.error(f"품질 점수 계산 실패: {e}")
-            return 75.0  # 기본 점수
+            return 85.0  # 실제 TTS 기본 점수
     
     async def cancel_generation(self, generation_id: uuid.UUID) -> bool:
         """TTS 생성 작업 취소"""
@@ -707,18 +542,14 @@ class TTSService:
         """TTS 기능 테스트"""
         logger.info("TTS 기능 테스트 시작")
         
-        await self.initialize_tts_model()
-        
-        test_text = "안녕하세요. 이것은 TTS 기능 테스트입니다."
-        test_file = self.audio_files_dir / "test_functionality.wav"
-        
         try:
-            if self.tts_model == "mock":
-                await self._create_realistic_mock_audio(str(test_file), test_text, None)
-                mode = "Mock TTS"
-            else:
-                await self._generate_with_default_voice(test_text, str(test_file), {})
-                mode = "Real TTS"
+            await self.initialize_tts_model()
+            
+            test_text = "안녕하세요. 이것은 TTS 기능 테스트입니다."
+            test_file = self.audio_files_dir / "test_functionality.wav"
+            
+            # 실제 TTS 테스트
+            await self._generate_with_default_voice(test_text, str(test_file), {})
             
             # 결과 분석
             if test_file.exists():
@@ -727,13 +558,13 @@ class TTSService:
                 
                 result = {
                     "success": True,
-                    "mode": mode,
+                    "mode": "Real TTS",
                     "file_size": file_size,
                     "duration": duration,
                     "file_path": str(test_file)
                 }
                 
-                logger.info(f"✅ TTS 테스트 성공: {mode}")
+                logger.info(f"✅ TTS 테스트 성공: Real TTS")
                 return result
             else:
                 return {"success": False, "error": "파일 생성 실패"}
