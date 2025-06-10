@@ -105,10 +105,47 @@ async def test_tts_model_loading():
         import torch
         use_gpu = torch.cuda.is_available()
         logger.info(f"GPU 사용: {use_gpu}")
+        logger.info(f"PyTorch 버전: {torch.__version__}")
+        
+        # PyTorch 2.6+ 호환성 설정
+        try:
+            from TTS.tts.configs.xtts_config import XttsConfig
+            torch.serialization.add_safe_globals([XttsConfig])
+            logger.info("✅ PyTorch 안전한 글로벌 설정 완료")
+            
+            # 추가 Config 클래스들도 시도
+            try:
+                from TTS.config.shared_configs import BaseTrainingConfig
+                torch.serialization.add_safe_globals([BaseTrainingConfig])
+                logger.info("✅ BaseTrainingConfig 추가")
+            except ImportError:
+                pass
+                
+        except Exception as e:
+            logger.warning(f"⚠️ PyTorch 안전 글로벌 설정 실패: {e}")
+            logger.warning("계속 진행하지만 모델 로딩에 실패할 수 있습니다...")
         
         # 모델 로딩 시도
         def load_model():
-            return TTS(model_name, gpu=use_gpu)
+            try:
+                return TTS(model_name, gpu=use_gpu)
+            except Exception as e:
+                if "weights_only" in str(e) or "WeightsUnpickler" in str(e):
+                    logger.warning("🚨 PyTorch 2.6+ 호환성 문제 감지")
+                    logger.warning("해결 시도: torch.load 함수 패치...")
+                    
+                    # torch.load 함수 패치
+                    original_load = torch.load
+                    def patched_load(*args, **kwargs):
+                        if 'weights_only' not in kwargs:
+                            kwargs['weights_only'] = False
+                        return original_load(*args, **kwargs)
+                    torch.load = patched_load
+                    
+                    # 다시 시도
+                    return TTS(model_name, gpu=use_gpu)
+                else:
+                    raise
         
         # 비동기 실행으로 타임아웃 설정
         loop = asyncio.get_event_loop()
@@ -129,6 +166,15 @@ async def test_tts_model_loading():
         return False
     except Exception as e:
         logger.error(f"❌ TTS 모델 로딩 실패: {type(e).__name__}: {e}")
+        
+        # PyTorch 2.6+ 오류인지 확인
+        if "weights_only" in str(e) or "WeightsUnpickler" in str(e):
+            logger.error("🚨 PyTorch 2.6+ 호환성 문제입니다!")
+            logger.error("해결 방법:")
+            logger.error("1. PyTorch 다운그레이드: pip install 'torch<2.6' 'torchaudio<2.6'")
+            logger.error("2. 의존성 업데이트: uv sync")
+            logger.error("3. 호환성 스크립트 실행: python fix_pytorch_compatibility.py")
+        
         return False
 
 async def test_tts_generation(tts_model, use_gpu):
