@@ -296,9 +296,18 @@ class TTSService:
                 
                 if reference_wavs:
                     logger.info(f"참조 음성 파일: {len(reference_wavs)}개")
-                    await self._generate_with_voice_cloning(
-                        text, reference_wavs, str(output_path), generation_params
-                    )
+                    try:
+                        await self._generate_with_voice_cloning(
+                            text, reference_wavs, str(output_path), generation_params
+                        )
+                        logger.info(f"Voice Cloning 성공: {output_path}")
+                    except Exception as voice_cloning_error:
+                        logger.warning(f"Voice Cloning 실패, 기본 음성으로 fallback: {voice_cloning_error}")
+                        # Voice Cloning 실패 시 기본 음성으로 fallback
+                        await self._generate_with_default_voice(
+                            text, str(output_path), generation_params
+                        )
+                        logger.info(f"기본 음성 fallback 성공: {output_path}")
                 else:
                     logger.warning(f"{voice_actor.name}의 참조 음성이 없습니다. 기본 음성 사용")
                     await self._generate_with_default_voice(
@@ -375,7 +384,32 @@ class TTSService:
                 }
                 
                 logger.info(f"TTS 매개변수: {tts_params}")
-                self.tts_model.tts_to_file(**tts_params)
+                
+                try:
+                    # Voice Cloning 시도
+                    self.tts_model.tts_to_file(**tts_params)
+                    logger.info("Voice Cloning 완료")
+                    
+                except Exception as voice_error:
+                    # Voice Cloning 실패 시 기본 음성으로 fallback
+                    if "generate" in str(voice_error) or "GPT2InferenceModel" in str(voice_error):
+                        logger.warning(f"Voice Cloning 실패 (Transformers 호환성 문제): {voice_error}")
+                        logger.info("기본 TTS로 fallback 시도...")
+                        
+                        # 기본 TTS 매개변수
+                        fallback_params = {
+                            "text": text,
+                            "file_path": output_path,
+                            "language": "ko",
+                            "split_sentences": True,
+                        }
+                        
+                        # 기본 TTS 시도
+                        self.tts_model.tts_to_file(**fallback_params)
+                        logger.info("기본 TTS로 fallback 성공")
+                    else:
+                        # 다른 오류는 그대로 전달
+                        raise voice_error
             
             # 타임아웃을 둬서 무한 대기 방지
             await asyncio.wait_for(
@@ -383,13 +417,30 @@ class TTSService:
                 timeout=120  # 2분 타임아웃
             )
             
-            logger.info("Voice Cloning 완료")
-            
         except asyncio.TimeoutError:
             logger.error("Voice Cloning 타임아웃")
             raise Exception("음성 생성 시간이 초과되었습니다 (2분)")
         except Exception as e:
-            logger.error(f"Voice Cloning 실패: {e}")
+            logger.error(f"Voice Cloning 최종 실패: {e}")
+            
+            # Transformers 호환성 문제인지 확인
+            if "generate" in str(e) or "GPT2InferenceModel" in str(e) or "GenerationMixin" in str(e):
+                logger.error("🚨 Transformers v4.50+ 호환성 문제 감지")
+                logger.error("해결 방법:")
+                logger.error("1. transformers 다운그레이드: pip install 'transformers<4.50'")
+                logger.error("2. 의존성 업데이트: uv sync")
+                logger.error("3. 서버 재시작")
+                
+                # 기본 TTS로 한 번 더 시도
+                try:
+                    logger.info("최종 fallback: 기본 TTS 시도...")
+                    await self._generate_with_default_voice(text, output_path, params)
+                    logger.info("✅ 기본 TTS fallback 성공")
+                    return
+                except Exception as fallback_error:
+                    logger.error(f"기본 TTS fallback도 실패: {fallback_error}")
+                    raise Exception(f"Voice Cloning 및 기본 TTS 모두 실패: {str(e)}")
+            
             raise Exception(f"Voice Cloning 실패: {str(e)}")
     
     async def _generate_with_default_voice(
