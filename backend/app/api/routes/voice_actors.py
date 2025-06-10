@@ -964,6 +964,183 @@ async def fix_common_tts_issues(
             "error": str(e)
         }
 
+@router.post("/test-tts")
+async def test_tts_functionality(
+    *,
+    current_user: CurrentUser
+):
+    """TTS 기능 테스트 엔드포인트"""
+    logger.info(f"🧪 TTS functionality test requested by user {current_user.id}")
+    
+    try:
+        # TTS 서비스 기능 테스트
+        test_result = await tts_service.test_tts_functionality()
+        
+        return {
+            "message": "TTS 기능 테스트 완료",
+            "timestamp": datetime.now().isoformat(),
+            "test_result": test_result,
+            "status": "success" if test_result.get("success") else "failed"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ TTS functionality test failed: {e}")
+        return {
+            "message": "TTS 기능 테스트 실패",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "status": "error"
+        }
+
+@router.post("/generate-test-tts")
+async def generate_test_tts(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    test_text: str = "안녕하세요. 이것은 TTS 테스트 음성입니다. 개선된 음성 품질을 확인해보세요.",
+    voice_actor_id: Optional[uuid.UUID] = None
+):
+    """테스트용 TTS 생성"""
+    logger.info(f"🎙️ Test TTS generation requested by user {current_user.id}")
+    logger.info(f"Text: '{test_text[:50]}...'")
+    
+    try:
+        # 테스트 TTS 스크립트 생성
+        test_script = TTSScript(
+            text_content=test_text,
+            voice_actor_id=voice_actor_id,
+            voice_settings={
+                "speed": 1.0,
+                "tone": "friendly",
+                "emotion": "bright",
+                "test_mode": True
+            },
+            created_by=current_user.id
+        )
+        
+        session.add(test_script)
+        session.commit()
+        session.refresh(test_script)
+        
+        # TTS 생성 작업 생성
+        test_generation = TTSGeneration(
+            script_id=test_script.id,
+            generation_params={
+                "quality": "high",
+                "test_mode": True,
+                "priority": "high"
+            },
+            requested_by=current_user.id
+        )
+        
+        session.add(test_generation)
+        session.commit()
+        session.refresh(test_generation)
+        
+        # 백그라운드에서 즉시 처리
+        background_tasks.add_task(
+            tts_service.process_tts_generation,
+            test_generation.id
+        )
+        
+        # 성우 정보 추가
+        voice_actor_name = None
+        if voice_actor_id:
+            voice_actor = session.get(VoiceActor, voice_actor_id)
+            if voice_actor:
+                voice_actor_name = voice_actor.name
+        
+        return {
+            "message": "테스트 TTS 생성이 시작되었습니다",
+            "timestamp": datetime.now().isoformat(),
+            "script_id": str(test_script.id),
+            "generation_id": str(test_generation.id),
+            "text_content": test_text,
+            "voice_actor_name": voice_actor_name,
+            "estimated_time": "30-60초",
+            "status": "pending"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Test TTS generation failed: {e}")
+        return {
+            "message": "테스트 TTS 생성 실패",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "status": "error"
+        }
+
+@router.get("/tts-status")
+async def get_tts_service_status(
+    *,
+    current_user: CurrentUser
+):
+    """TTS 서비스 상태 조회"""
+    logger.info(f"📊 TTS service status requested by user {current_user.id}")
+    
+    try:
+        # TTS 모델 초기화 상태 확인
+        await tts_service.initialize_tts_model()
+        
+        # 디렉토리 상태 확인
+        audio_files_dir = Path("audio_files")
+        voice_samples_dir = Path("voice_samples")
+        
+        audio_files_count = len(list(audio_files_dir.glob("*.wav"))) if audio_files_dir.exists() else 0
+        voice_samples_count = len(list(voice_samples_dir.rglob("*.wav"))) if voice_samples_dir.exists() else 0
+        
+        # TTS 모델 상태
+        tts_mode = "Real TTS" if tts_service.tts_model != "mock" else "Mock TTS"
+        model_status = "loaded" if tts_service.model_loaded else "not_loaded"
+        
+        # GPU 상태 확인
+        gpu_status = "unavailable"
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_status = f"available ({torch.cuda.device_count()} devices)"
+            else:
+                gpu_status = "cuda_unavailable"
+        except ImportError:
+            gpu_status = "torch_not_installed"
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "service_status": "healthy",
+            "tts_mode": tts_mode,
+            "model_status": model_status,
+            "gpu_status": gpu_status,
+            "gpu_enabled": tts_service.use_gpu,
+            "directories": {
+                "audio_files": {
+                    "path": str(audio_files_dir),
+                    "exists": audio_files_dir.exists(),
+                    "files_count": audio_files_count
+                },
+                "voice_samples": {
+                    "path": str(voice_samples_dir),
+                    "exists": voice_samples_dir.exists(),
+                    "files_count": voice_samples_count
+                }
+            },
+            "recommendations": [
+                "🎙️ 실제 음성을 원하면 Coqui TTS 라이브러리를 설치하세요" if tts_mode == "Mock TTS" else "✅ 실제 TTS 모델이 활성화되어 있습니다",
+                "⚡ GPU 가속을 위해 CUDA를 설치하세요" if gpu_status == "cuda_unavailable" else "✅ GPU 가속이 사용 가능합니다" if "available" in gpu_status else "ℹ️ CPU 모드로 동작 중입니다"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ TTS service status check failed: {e}")
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "service_status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
 # === 성우 관리 (path parameter를 포함한 경로는 마지막에 정의) ===
 
 @router.post("/", response_model=VoiceActorPublic)
