@@ -64,13 +64,80 @@ class TTSService:
             
             def _load_model():
                 try:
+                    # PyTorch 2.6+ 호환성을 위한 안전한 글로벌 설정
+                    import torch
+                    logger.info(f"PyTorch 버전: {torch.__version__}")
+                    
+                    try:
+                        # TTS 관련 Config 클래스들을 안전한 글로벌에 추가
+                        from TTS.tts.configs.xtts_config import XttsConfig
+                        
+                        # 다른 TTS Config 클래스들도 추가 시도
+                        safe_globals = [XttsConfig]
+                        
+                        try:
+                            from TTS.config.shared_configs import BaseTrainingConfig
+                            safe_globals.append(BaseTrainingConfig)
+                        except ImportError:
+                            pass
+                        
+                        try:
+                            from TTS.tts.configs.shared_configs import BaseDatasetConfig
+                            safe_globals.append(BaseDatasetConfig)
+                        except ImportError:
+                            pass
+                        
+                        # 안전한 글로벌 추가
+                        torch.serialization.add_safe_globals(safe_globals)
+                        logger.info(f"PyTorch 안전한 글로벌 설정 완료: {[cls.__name__ for cls in safe_globals]}")
+                        
+                    except Exception as config_error:
+                        logger.warning(f"Config 클래스 로드 중 오류: {config_error}")
+                        # config 로드 실패시에도 계속 진행
+                        pass
+                    
                     # 메모리 사용량 최적화 설정
                     tts = TTS(model_name, gpu=self.use_gpu)
                     logger.info("TTS 모델 로딩 성공")
                     return tts
+                    
                 except Exception as e:
                     logger.error(f"TTS 모델 로딩 실패: {e}")
-                    raise
+                    
+                    # PyTorch 2.6+ 오류인 경우 대안 제시
+                    if "weights_only" in str(e) or "WeightsUnpickler" in str(e):
+                        logger.error("🚨 PyTorch 2.6+ 보안 정책 오류 발생")
+                        logger.error("해결 방법:")
+                        logger.error("1. PyTorch 버전 다운그레이드: pip install 'torch<2.6'")
+                        logger.error("2. TTS 라이브러리 업데이트: pip install --upgrade TTS")
+                        logger.error("3. 수동 해결: torch.load(..., weights_only=False) 사용")
+                        
+                        # TTS 라이브러리에서 weights_only=False 옵션을 사용하도록 설정
+                        try:
+                            import torch
+                            # 기존 torch.load 함수를 백업
+                            original_load = torch.load
+                            
+                            def patched_load(*args, **kwargs):
+                                # weights_only 인자가 없으면 False로 설정
+                                if 'weights_only' not in kwargs:
+                                    kwargs['weights_only'] = False
+                                return original_load(*args, **kwargs)
+                            
+                            # torch.load 함수를 패치
+                            torch.load = patched_load
+                            logger.info("🔧 torch.load 함수 패치 적용")
+                            
+                            # 다시 TTS 로드 시도
+                            tts = TTS(model_name, gpu=self.use_gpu)
+                            logger.info("✅ 패치된 torch.load로 TTS 모델 로딩 성공")
+                            return tts
+                            
+                        except Exception as patch_error:
+                            logger.error(f"패치 시도 실패: {patch_error}")
+                            pass
+                    
+                    raise Exception(f"TTS 모델 로딩 실패: {str(e)}")
             
             # 실제 모델 로딩 (타임아웃 설정)
             try:
@@ -111,7 +178,18 @@ class TTSService:
             
         except Exception as e:
             logger.error(f"TTS 초기화 실패: {e}")
+            
+            # PyTorch 버전 과 관련된 오류인지 확인
+            if "weights_only" in str(e) or "WeightsUnpickler" in str(e):
+                logger.error("🚨 알려진 PyTorch 2.6+ 호환성 문제")
+                logger.error("작업 방법:")
+                logger.error("1. PyTorch 다운그레이드: pip install 'torch<2.6' 'torchaudio<2.6'")
+                logger.error("2. TTS 업데이트: pip install --upgrade TTS")
+                logger.error("3. 환경 재시작: 서버 재시작 후 다시 시도")
+            
             raise Exception(f"TTS 시스템 초기화에 실패했습니다: {str(e)}")
+            
+
     
     async def process_tts_generation(self, generation_id: uuid.UUID) -> None:
         """백그라운드에서 TTS 생성 작업을 처리"""
