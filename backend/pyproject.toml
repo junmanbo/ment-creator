@@ -21,6 +21,7 @@ dependencies = [
     "TTS>=0.22.0",
     "torch>=2.0.0,<2.6.0",
     "torchaudio>=2.0.0,<2.6.0",
+    "transformers>=4.21.0,<4.50.0",  # GPT2InferenceModel generate 메서드 지원
     "librosa>=0.10.0",
     "soundfile>=0.12.0",
     # 백그라운드 작업용
