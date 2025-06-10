@@ -17,10 +17,10 @@ dependencies = [
     "sqlalchemy>=2.0.38",
     "sqlmodel>=0.0.22",
     "tenacity>=9.0.0",
-    # TTS 관련 의존성
+    # TTS 관련 의존성 (PyTorch 2.6+ 호환성 문제 방지)
     "TTS>=0.22.0",
-    "torch>=2.0.0",
-    "torchaudio>=2.0.0",
+    "torch>=2.0.0,<2.6.0",
+    "torchaudio>=2.0.0,<2.6.0",
     "librosa>=0.10.0",
     "soundfile>=0.12.0",
     # 백그라운드 작업용
