@@ -9,9 +9,16 @@ from typing import Union, Optional
 from enum import Enum
 
 from app.services.tts_service import TTSService
-from app.services.fish_speech_tts_service import FishSpeechTTSService
 
 logger = logging.getLogger(__name__)
+
+try:
+    from app.services.fish_speech_tts_service import FishSpeechTTSService
+    FISH_SPEECH_AVAILABLE = True
+except ImportError:
+    logger.warning("Fish Speech TTS 서비스를 불러올 수 없습니다. Mock 서비스를 사용합니다.")
+    FISH_SPEECH_AVAILABLE = False
+    from app.services.mock.fish_speech_mock_service import FishSpeechMockTTSService as FishSpeechTTSService
 
 class TTSEngine(str, Enum):
     """지원되는 TTS 엔진"""
@@ -64,7 +71,10 @@ class TTSServiceFactory:
             logger.info("✅ Coqui TTS 서비스 로드")
         elif target_engine == TTSEngine.FISH_SPEECH:
             self._current_service = FishSpeechTTSService()
-            logger.info("🐟 Fish Speech TTS 서비스 로드")
+            if FISH_SPEECH_AVAILABLE:
+                logger.info("🐟 Fish Speech TTS 서비스 로드")
+            else:
+                logger.info("🐟 Fish Speech Mock TTS 서비스 로드 (테스트용)")
         else:
             raise ValueError(f"지원되지 않는 TTS 엔진: {target_engine}")
         
