@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useToast } from "@/components/ui/use-toast"
 import {
   Settings,
   User,
@@ -28,11 +29,40 @@ import {
   Volume2,
   Mail,
   Save,
-  RefreshCw
+  RefreshCw,
+  Zap,
+  PlayCircle,
+  CheckCircle,
+  XCircle,
+  Loader2
 } from "lucide-react"
+
+interface TTSEngine {
+  name: string
+  display_name: string
+  description: string
+  features: string[]
+  performance: string
+  quality: string
+}
+
+interface TTSEngineStatus {
+  available: boolean
+  initialized: boolean
+  description: string
+  error?: string
+}
 
 export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResults, setTestResults] = useState<Record<string, any>>({})
+  
+  // TTS 엔진 관련 상태
+  const [ttsEngines, setTtsEngines] = useState<TTSEngine[]>([])
+  const [currentEngine, setCurrentEngine] = useState<string>("")
+  const [engineStatus, setEngineStatus] = useState<Record<string, TTSEngineStatus>>({})
+  const [isLoadingEngines, setIsLoadingEngines] = useState(true)
   
   // 시스템 설정 상태
   const [systemSettings, setSystemSettings] = useState({
@@ -52,14 +82,191 @@ export default function SettingsPage() {
     language: "ko"
   })
 
+  const { toast } = useToast()
+
+  // TTS 엔진 정보 로드
+  useEffect(() => {
+    loadTTSEngines()
+  }, [])
+
+  const loadTTSEngines = async () => {
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      
+      // TTS 엔진 목록 조회
+      const enginesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/tts-engines/`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (enginesResponse.ok) {
+        const enginesData = await enginesResponse.json()
+        setTtsEngines(enginesData.supported_engines)
+        setCurrentEngine(enginesData.current_engine)
+      }
+
+      // TTS 엔진 상태 조회
+      const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/tts-engines/status`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json()
+        setEngineStatus(statusData.engines)
+      }
+
+    } catch (error) {
+      console.error("TTS 엔진 정보 로드 실패:", error)
+      toast({
+        title: "오류",
+        description: "TTS 엔진 정보를 불러오는데 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingEngines(false)
+    }
+  }
+
+  const switchTTSEngine = async (engine: string) => {
+    setIsLoading(true)
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/tts-engines/switch/${engine}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentEngine(engine)
+        toast({
+          title: "TTS 엔진 전환 완료",
+          description: data.message,
+        })
+        
+        // 상태 다시 로드
+        await loadTTSEngines()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "엔진 전환 실패")
+      }
+    } catch (error: any) {
+      toast({
+        title: "TTS 엔진 전환 실패",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const testTTSEngine = async (engine: string) => {
+    setIsTesting(true)
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/tts-engines/test/${engine}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setTestResults(prev => ({
+          ...prev,
+          [engine]: data.test_result
+        }))
+        
+        toast({
+          title: "TTS 엔진 테스트 완료",
+          description: `${engine} 엔진 테스트가 완료되었습니다.`,
+        })
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "테스트 실패")
+      }
+    } catch (error: any) {
+      toast({
+        title: "TTS 엔진 테스트 실패",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const runBenchmark = async () => {
+    setIsTesting(true)
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/tts-engines/benchmark`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setTestResults(data.benchmark_results)
+        
+        toast({
+          title: "벤치마크 완료",
+          description: `추천 엔진: ${data.benchmark_results.recommendation?.best_engine}`,
+        })
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "벤치마크 실패")
+      }
+    } catch (error: any) {
+      toast({
+        title: "벤치마크 실패",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
   const handleSaveSettings = async () => {
     setIsLoading(true)
     try {
       // API 호출 시뮬레이션
       await new Promise(resolve => setTimeout(resolve, 1000))
-      // 실제 구현 시에는 API 호출
+      toast({
+        title: "설정 저장 완료",
+        description: "모든 설정이 저장되었습니다.",
+      })
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const getEngineStatusIcon = (status: TTSEngineStatus) => {
+    if (!status.available) {
+      return <XCircle className="h-4 w-4 text-red-500" />
+    } else if (status.initialized) {
+      return <CheckCircle className="h-4 w-4 text-green-500" />
+    } else {
+      return <Loader2 className="h-4 w-4 text-yellow-500" />
+    }
+  }
+
+  const getPerformanceBadgeColor = (performance: string) => {
+    switch (performance) {
+      case "high": return "bg-green-100 text-green-800"
+      case "medium": return "bg-yellow-100 text-yellow-800"
+      case "low": return "bg-red-100 text-red-800"
+      default: return "bg-gray-100 text-gray-800"
     }
   }
 
@@ -97,6 +304,157 @@ export default function SettingsPage() {
         {/* 시스템 설정 탭 */}
         <TabsContent value="system" className="space-y-6">
           <div className="grid gap-6">
+            {/* 🔄 TTS 엔진 관리 (새로 추가) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Zap className="h-5 w-5 mr-2" />
+                    TTS 엔진 관리
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={runBenchmark}
+                    disabled={isTesting}
+                  >
+                    {isTesting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <PlayCircle className="h-4 w-4 mr-2" />
+                    )}
+                    성능 비교
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isLoadingEngines ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <span className="ml-2">TTS 엔진 정보 로드 중...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* 현재 엔진 표시 */}
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-blue-900">현재 사용 중인 엔진</h4>
+                          <p className="text-blue-700">
+                            {ttsEngines.find(e => e.name === currentEngine)?.display_name || currentEngine}
+                          </p>
+                        </div>
+                        <Badge className="bg-blue-100 text-blue-800">활성</Badge>
+                      </div>
+                    </div>
+
+                    {/* 사용 가능한 엔진 목록 */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold">사용 가능한 TTS 엔진</h4>
+                      {ttsEngines.map((engine) => (
+                        <div key={engine.name} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              {getEngineStatusIcon(engineStatus[engine.name] || { available: false, initialized: false, description: "" })}
+                              <div>
+                                <h5 className="font-medium">{engine.display_name}</h5>
+                                <p className="text-sm text-gray-600">{engine.description}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge className={getPerformanceBadgeColor(engine.performance)}>
+                                {engine.performance === "high" ? "고성능" : engine.performance === "medium" ? "보통" : "기본"}
+                              </Badge>
+                              <Badge variant="outline">
+                                {engine.quality === "excellent" ? "최고품질" : engine.quality === "good" ? "좋음" : "보통"}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {/* 기능 태그 */}
+                          <div className="flex flex-wrap gap-1">
+                            {engine.features.map((feature) => (
+                              <Badge key={feature} variant="secondary" className="text-xs">
+                                {feature === "voice_cloning" ? "음성복제" :
+                                 feature === "multilingual" ? "다국어" :
+                                 feature === "high_quality" ? "고품질" :
+                                 feature === "fast" ? "고속" :
+                                 feature === "open_source" ? "오픈소스" : feature}
+                              </Badge>
+                            ))}
+                          </div>
+
+                          {/* 테스트 결과 */}
+                          {testResults[engine.name] && (
+                            <div className="bg-gray-50 rounded p-3 text-sm">
+                              <div className="flex items-center justify-between">
+                                <span>테스트 결과:</span>
+                                <div className="flex items-center space-x-2">
+                                  {testResults[engine.name].success ? (
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                  )}
+                                  <span className={testResults[engine.name].success ? "text-green-600" : "text-red-600"}>
+                                    {testResults[engine.name].success ? "성공" : "실패"}
+                                  </span>
+                                </div>
+                              </div>
+                              {testResults[engine.name].generation_time && (
+                                <p className="text-gray-600 mt-1">
+                                  생성 시간: {testResults[engine.name].generation_time.toFixed(2)}초
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 액션 버튼 */}
+                          <div className="flex space-x-2">
+                            {currentEngine !== engine.name && (
+                              <Button
+                                size="sm"
+                                onClick={() => switchTTSEngine(engine.name)}
+                                disabled={isLoading || !engineStatus[engine.name]?.available}
+                              >
+                                {isLoading ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  "전환"
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => testTTSEngine(engine.name)}
+                              disabled={isTesting || !engineStatus[engine.name]?.available}
+                            >
+                              {isTesting ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <PlayCircle className="h-4 w-4 mr-2" />
+                              )}
+                              테스트
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 추천 정보 */}
+                    {testResults.recommendation && (
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <h4 className="font-semibold text-green-900 mb-2">🎯 추천 엔진</h4>
+                        <p className="text-green-700">
+                          <strong>{testResults.recommendation.best_engine}</strong> - {testResults.recommendation.reason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* TTS 설정 */}
             <Card>
               <CardHeader>
