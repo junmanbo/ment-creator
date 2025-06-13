@@ -1,0 +1,57 @@
+# Fish Speech TTS API 서버를 위한 Dockerfile
+FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel
+
+# 시스템 패키지 설치
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    build-essential \
+    libsndfile1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# Fish Speech 저장소 클론
+RUN git clone https://github.com/fishaudio/fish-speech.git /app/fish-speech
+
+# Fish Speech 디렉토리로 이동
+WORKDIR /app/fish-speech
+
+# Python 의존성 설치
+RUN pip install --upgrade pip
+RUN pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
+RUN pip install -e ".[stable]"
+
+# 추가 필요한 패키지 설치
+RUN pip install pyrootutils>=1.0.4 fastapi uvicorn httpx
+
+# S1 모델 다운로드 (사전 학습된 모델)
+RUN mkdir -p checkpoints
+RUN wget -O checkpoints/fish-speech-1.4-s1.pth \
+    https://huggingface.co/fishaudio/fish-speech-1.4/resolve/main/fish-speech-1.4-s1.pth
+
+# 포트 노출
+EXPOSE 8765
+
+# 환경변수 설정
+ENV PYTHONPATH=/app/fish-speech
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Fish Speech API 서버 시작 스크립트 생성
+RUN echo '#!/bin/bash\n\
+cd /app/fish-speech\n\
+python -m fish_speech.webui.api \\\n\
+    --listen 0.0.0.0:8765 \\\n\
+    --llama-checkpoint-path checkpoints/fish-speech-1.4-s1.pth \\\n\
+    --decoder-checkpoint-path checkpoints \\\n\
+    --device cuda:0 \\\n\
+    --compile \\\n\
+    --max-length 4096\n\
+' > /app/start_server.sh
+
+RUN chmod +x /app/start_server.sh
+
+# 기본 실행 명령
+CMD ["/app/start_server.sh"]

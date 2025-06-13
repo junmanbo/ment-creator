@@ -1,5 +1,64 @@
 services:
 
+  # Fish Speech TTS API 서버 (GPU 버전)
+  fish-speech-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.fishspeech
+    container_name: fish-speech-api-gpu
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - fish-speech-models:/app/fish-speech/checkpoints
+      - fish-speech-cache:/root/.cache
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app/fish-speech
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - default
+    profiles:
+      - gpu
+      
+  # Fish Speech TTS API 서버 (CPU 버전)
+  fish-speech-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.fishspeech-cpu
+    container_name: fish-speech-api-cpu
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - fish-speech-models:/app/fish-speech/checkpoints
+      - fish-speech-cache:/root/.cache
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - PYTHONPATH=/app/fish-speech
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - default
+    profiles:
+      - cpu
+
   db:
     image: postgres:17
     restart: always
@@ -166,6 +225,8 @@ services:
   #     - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 volumes:
   app-db-data:
+  fish-speech-models:
+  fish-speech-cache:
 
 # networks:
 #   traefik-public:

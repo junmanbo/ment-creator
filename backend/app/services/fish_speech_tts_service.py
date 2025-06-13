@@ -29,7 +29,8 @@ class FishSpeechTTSService:
     """Fish Speech 기반 TTS 서비스"""
     
     def __init__(self):
-        self.api_url = "http://127.0.0.1:8765"  # Fish Speech API 서버
+        # Docker 환경에서는 서비스명으로 접근
+        self.api_url = os.getenv("FISH_SPEECH_API_URL", "http://fish-speech:8765")
         self.audio_files_dir = Path("audio_files")
         self.voice_samples_dir = Path("voice_samples")
         self.fish_speech_dir = Path("fish_speech/fish-speech")
@@ -42,47 +43,42 @@ class FishSpeechTTSService:
         self.model_loaded = False
         self.initialization_lock = asyncio.Lock()
         
-        # Fish Speech 설정
+        # Fish Speech S1 모델 설정
         self.config = {
+            "model": os.getenv("FISH_SPEECH_MODEL", "S1"),  # S1 모델 사용
             "language": "ko",
             "temperature": 0.7,
             "top_p": 0.85,
             "top_k": 50,
             "repetition_penalty": 1.1,
             "sample_rate": 22050,
-            "format": "wav"
+            "format": "wav",
+            "device": os.getenv("FISH_SPEECH_DEVICE", "cuda:0")
         }
         
         logger.info("🐟 Fish Speech TTS 서비스 초기화")
     
     async def initialize_tts_model(self):
-        """Fish Speech 모델 및 API 서버 초기화"""
+        """Fish Speech API 서버 준비 상태 확인 (Docker 환경)"""
         async with self.initialization_lock:
             if self.model_loaded:
                 return
                 
-            logger.info("🐟 Fish Speech 모델 초기화 시작...")
+            logger.info("🐟 Fish Speech API 서버 연결 확인 시작...")
             
             try:
-                # 1. Fish Speech 설치 확인
-                if not await self._check_fish_speech_installation():
-                    raise Exception("Fish Speech가 설치되지 않았습니다. install_fish_speech.py를 실행해주세요.")
+                # Docker 에서 Fish Speech 서비스 준비 대기
+                await self._wait_for_api_server(timeout=120)  # 더 긴 대기 시간
                 
-                # 2. API 서버 시작
-                await self._start_api_server()
-                
-                # 3. API 서버 연결 확인
-                await self._wait_for_api_server()
-                
-                # 4. 모델 상태 확인
+                # 모델 상태 확인
                 await self._check_model_status()
                 
                 self.model_loaded = True
-                logger.info("✅ Fish Speech 모델 초기화 완료")
+                logger.info("✅ Fish Speech API 서버 연동 완료")
                 
             except Exception as e:
-                logger.error(f"❌ Fish Speech 초기화 실패: {e}")
-                raise Exception(f"Fish Speech 시스템을 초기화할 수 없습니다: {str(e)}")
+                logger.error(f"❌ Fish Speech API 서버 연결 실패: {e}")
+                raise Exception(f"Fish Speech API 서버에 연결할 수 없습니다: {str(e)}")
     
     async def _check_fish_speech_installation(self) -> bool:
         """Fish Speech 설치 상태 확인"""
@@ -354,17 +350,19 @@ class FishSpeechTTSService:
         logger.info(f"🐟 Fish Speech Voice Cloning 시작")
         
         try:
-            # Fish Speech API 요청 데이터
+            # Fish Speech S1 모델 API 요청 데이터
             request_data = {
                 "text": text,
                 "reference_audio": reference_audio,
+                "model": self.config["model"],  # S1 모델 명시
                 "language": params.get("language", self.config["language"]),
                 "temperature": params.get("temperature", self.config["temperature"]),
                 "top_p": params.get("top_p", self.config["top_p"]),
                 "top_k": params.get("top_k", self.config["top_k"]),
                 "repetition_penalty": params.get("repetition_penalty", self.config["repetition_penalty"]),
                 "format": self.config["format"],
-                "sample_rate": self.config["sample_rate"]
+                "sample_rate": self.config["sample_rate"],
+                "device": self.config["device"]
             }
             
             logger.info(f"Fish Speech API 요청: {request_data}")
@@ -408,13 +406,15 @@ class FishSpeechTTSService:
         try:
             request_data = {
                 "text": text,
+                "model": self.config["model"],  # S1 모델 명시
                 "language": params.get("language", self.config["language"]),
                 "temperature": params.get("temperature", self.config["temperature"]),
                 "top_p": params.get("top_p", self.config["top_p"]),
                 "top_k": params.get("top_k", self.config["top_k"]),
                 "repetition_penalty": params.get("repetition_penalty", self.config["repetition_penalty"]),
                 "format": self.config["format"],
-                "sample_rate": self.config["sample_rate"]
+                "sample_rate": self.config["sample_rate"],
+                "device": self.config["device"]
             }
             
             logger.info(f"Fish Speech API 요청: {request_data}")
