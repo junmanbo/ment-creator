@@ -17,14 +17,49 @@ dependencies = [
     "sqlalchemy>=2.0.38",
     "sqlmodel>=0.0.22",
     "tenacity>=9.0.0",
-    # TTS 관련 의존성 (PyTorch 2.6+ 호환성 문제 방지)
+    # TTS 관련 의존성 (기존 Coqui TTS 호환성 유지)
     "TTS>=0.22.0",
     "torch>=2.0.0,<2.6.0",
     "torchaudio>=2.0.0,<2.6.0",
-    "transformers>=4.21.0,<4.50.0",  # GPT2InferenceModel generate 메서드 지원
+    "transformers>=4.21.0,<4.50.0",
     "librosa>=0.10.0",
     "soundfile>=0.12.0",
+    # Fish Speech 관련 의존성
+    "httpx>=0.25.0",  # Fish Speech API 호출용
+    "aiofiles>=23.0.0",  # 비동기 파일 처리
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
     # 백그라운드 작업용
     "celery>=5.3.0",
     "redis>=5.0.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line too long, handled by black
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
+    "W191", # indentation contains tabs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["fastapi", "pydantic", "starlette"]

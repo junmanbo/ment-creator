@@ -24,8 +24,8 @@ from app.models.tts import (
     GenerationStatus
 )
 
-from app.services.tts_service import tts_service
-# from app.services.tts_service_debug import tts_debugger  # 임시 비활성화
+# 🔄 TTS 서비스를 팩토리 패턴으로 교체
+from app.services.tts_factory import get_tts_service
 
 # TTS Generation with Script info
 class TTSGenerationWithScript(TTSGenerationPublic):
@@ -480,7 +480,7 @@ async def generate_tts(
     current_user: CurrentUser,
     background_tasks: BackgroundTasks
 ) -> TTSGenerationPublic:
-    """TTS 생성 요청"""
+    """TTS 생성 요청 (팩토리 패턴 사용)"""
     # 스크립트 확인
     script = session.get(TTSScript, script_id)
     if not script:
@@ -496,6 +496,9 @@ async def generate_tts(
     session.add(generation)
     session.commit()
     session.refresh(generation)
+    
+    # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+    tts_service = get_tts_service()
     
     # 백그라운드에서 TTS 생성 처리
     background_tasks.add_task(
@@ -517,7 +520,7 @@ async def batch_generate_tts(
     current_user: CurrentUser,
     background_tasks: BackgroundTasks
 ):
-    """여러 TTS 스크립트를 한 번에 생성"""
+    """여러 TTS 스크립트를 한 번에 생성 (팩토리 패턴 사용)"""
     if not batch_request.script_ids:
         raise HTTPException(status_code=400, detail="스크립트 ID가 없습니다.")
     
@@ -531,6 +534,9 @@ async def batch_generate_tts(
             raise HTTPException(status_code=404, detail=f"스크립트 {script_id}를 찾을 수 없습니다.")
         if script.created_by != current_user.id:
             raise HTTPException(status_code=403, detail=f"스크립트 {script_id}에 대한 권한이 없습니다.")
+    
+    # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+    tts_service = get_tts_service()
     
     # 배치 생성 시작
     try:
@@ -706,13 +712,16 @@ async def cancel_tts_generation(
     generation_id: uuid.UUID,
     current_user: CurrentUser
 ):
-    """TTS 생성 취소"""
+    """TTS 생성 취소 (팩토리 패턴 사용)"""
     generation = session.get(TTSGeneration, generation_id)
     if not generation:
         raise HTTPException(status_code=404, detail="생성 작업을 찾을 수 없습니다.")
     
     if generation.requested_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+    
+    # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+    tts_service = get_tts_service()
     
     success = await tts_service.cancel_generation(generation_id)
     if success:
@@ -926,17 +935,20 @@ async def diagnose_tts_environment(
     *,
     current_user: CurrentUser
 ):
-    """TTS 환경 전체 진단"""
+    """TTS 환경 전체 진단 (팩토리 패턴 사용)"""
     logger.info(f"TTS diagnosis requested by user {current_user.id}")
     
     try:
+        # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+        tts_service = get_tts_service()
+        
         # 기본 TTS 진단 수행
         await tts_service.initialize_tts_model()
         
         diagnosis = {
-            "tts_mode": "Real TTS" if tts_service.tts_model != "mock" else "Mock TTS",
-            "model_loaded": tts_service.model_loaded,
-            "gpu_enabled": tts_service.use_gpu,
+            "tts_mode": "Real TTS" if getattr(tts_service, 'tts_model', None) != "mock" else "Mock TTS",
+            "model_loaded": getattr(tts_service, 'model_loaded', False),
+            "gpu_enabled": getattr(tts_service, 'use_gpu', False),
             "status": "healthy"
         }
         
@@ -957,7 +969,7 @@ async def fix_common_tts_issues(
     *,
     current_user: CurrentUser
 ):
-    """일반적인 TTS 문제들 자동 수정"""
+    """일반적인 TTS 문제들 자동 수정 (팩토리 패턴 사용)"""
     logger.info(f"TTS auto-fix requested by user {current_user.id}")
     
     try:
@@ -980,6 +992,9 @@ async def fix_common_tts_issues(
         if not voice_dir.exists():
             voice_dir.mkdir(parents=True, exist_ok=True)
             results["directories_created"] += 1
+        
+        # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+        tts_service = get_tts_service()
         
         # TTS 모델 재로드
         try:
@@ -1004,10 +1019,13 @@ async def test_tts_functionality(
     *,
     current_user: CurrentUser
 ):
-    """TTS 기능 테스트 엔드포인트"""
+    """TTS 기능 테스트 엔드포인트 (팩토리 패턴 사용)"""
     logger.info(f"🧪 TTS functionality test requested by user {current_user.id}")
     
     try:
+        # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+        tts_service = get_tts_service()
+        
         # TTS 서비스 기능 테스트
         test_result = await tts_service.test_tts_functionality()
         
@@ -1037,7 +1055,7 @@ async def generate_test_tts(
     test_text: str = "안녕하세요. 이것은 TTS 테스트 음성입니다. 개선된 음성 품질을 확인해보세요.",
     voice_actor_id: Optional[uuid.UUID] = None
 ):
-    """테스트용 TTS 생성"""
+    """테스트용 TTS 생성 (팩토리 패턴 사용)"""
     logger.info(f"🎙️ Test TTS generation requested by user {current_user.id}")
     logger.info(f"Text: '{test_text[:50]}...'")
     
@@ -1073,6 +1091,9 @@ async def generate_test_tts(
         session.add(test_generation)
         session.commit()
         session.refresh(test_generation)
+        
+        # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+        tts_service = get_tts_service()
         
         # 백그라운드에서 즉시 처리
         background_tasks.add_task(
@@ -1113,10 +1134,13 @@ async def get_tts_service_status(
     *,
     current_user: CurrentUser
 ):
-    """TTS 서비스 상태 조회"""
+    """TTS 서비스 상태 조회 (팩토리 패턴 사용)"""
     logger.info(f"📊 TTS service status requested by user {current_user.id}")
     
     try:
+        # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+        tts_service = get_tts_service()
+        
         # TTS 모델 초기화 상태 확인
         await tts_service.initialize_tts_model()
         
@@ -1128,8 +1152,8 @@ async def get_tts_service_status(
         voice_samples_count = len(list(voice_samples_dir.rglob("*.wav"))) if voice_samples_dir.exists() else 0
         
         # TTS 모델 상태
-        tts_mode = "Real TTS" if tts_service.tts_model != "mock" else "Mock TTS"
-        model_status = "loaded" if tts_service.model_loaded else "not_loaded"
+        tts_mode = "Real TTS" if getattr(tts_service, 'tts_model', None) != "mock" else "Mock TTS"
+        model_status = "loaded" if getattr(tts_service, 'model_loaded', False) else "not_loaded"
         
         # GPU 상태 확인
         gpu_status = "unavailable"
@@ -1148,7 +1172,7 @@ async def get_tts_service_status(
             "tts_mode": tts_mode,
             "model_status": model_status,
             "gpu_status": gpu_status,
-            "gpu_enabled": tts_service.use_gpu,
+            "gpu_enabled": getattr(tts_service, 'use_gpu', False),
             "directories": {
                 "audio_files": {
                     "path": str(audio_files_dir),
