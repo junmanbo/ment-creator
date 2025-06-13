@@ -46,18 +46,34 @@ function start_gpu() {
         exit 1
     fi
     
+    echo "🔨 Docker 이미지 빌드 중... (최초 실행 시 시간이 오래 걸립니다)"
     docker-compose --profile gpu up -d fish-speech-gpu
-    echo "✅ Fish Speech GPU 버전이 시작되었습니다."
-    echo "   API URL: http://localhost:8765"
-    echo "   상태 확인: $0 status"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Fish Speech GPU 버전이 시작되었습니다."
+        echo "   API URL: http://localhost:8765"
+        echo "   상태 확인: $0 status"
+        echo "   로그 확인: $0 logs"
+    else
+        echo "❌ GPU 버전 시작 실패. CPU 버전을 시도해보세요:"
+        echo "   $0 start-cpu"
+    fi
 }
 
 function start_cpu() {
     echo "🚀 Fish Speech CPU 버전 시작 중..."
+    echo "🔨 Docker 이미지 빌드 중... (최초 실행 시 시간이 오래 걸립니다)"
     docker-compose --profile cpu up -d fish-speech-cpu
-    echo "✅ Fish Speech CPU 버전이 시작되었습니다."
-    echo "   API URL: http://localhost:8765"
-    echo "   상태 확인: $0 status"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Fish Speech CPU 버전이 시작되었습니다."
+        echo "   API URL: http://localhost:8765"
+        echo "   상태 확인: $0 status"
+        echo "   로그 확인: $0 logs"
+    else
+        echo "❌ CPU 버전 시작 실패. 로그를 확인해보세요:"
+        echo "   $0 logs"
+    fi
 }
 
 function stop_service() {
@@ -119,8 +135,21 @@ function restart_cpu() {
 
 function build_images() {
     echo "🔨 Fish Speech Docker 이미지 빌드 중..."
-    docker-compose build --no-cache fish-speech-gpu fish-speech-cpu
+    echo "⚠️  처음 빌드 시 10-20분 정도 소요될 수 있습니다."
+    
+    # GPU 버전 빌드
+    echo "🎯 GPU 버전 빌드 시작..."
+    docker-compose build --no-cache fish-speech-gpu
+    
+    # CPU 버전 빌드
+    echo "🎯 CPU 버전 빌드 시작..."
+    docker-compose build --no-cache fish-speech-cpu
+    
     echo "✅ Docker 이미지 빌드 완료"
+    echo ""
+    echo "🚀 이제 서비스를 시작할 수 있습니다:"
+    echo "   GPU: $0 start-gpu"
+    echo "   CPU: $0 start-cpu"
 }
 
 # 메인 실행 로직

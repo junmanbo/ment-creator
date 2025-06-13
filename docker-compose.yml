@@ -4,7 +4,7 @@ services:
   fish-speech-gpu:
     build:
       context: .
-      dockerfile: Dockerfile.fishspeech
+      dockerfile: Dockerfile.fishspeech.v2
     container_name: fish-speech-api-gpu
     restart: unless-stopped
     ports:
@@ -37,7 +37,7 @@ services:
   fish-speech-cpu:
     build:
       context: .
-      dockerfile: Dockerfile.fishspeech-cpu
+      dockerfile: Dockerfile.fishspeech-cpu.v2
     container_name: fish-speech-api-cpu
     restart: unless-stopped
     ports:

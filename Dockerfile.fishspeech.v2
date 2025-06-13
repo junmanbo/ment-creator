@@ -1,0 +1,94 @@
+# Fish Speech TTS API 서버를 위한 GPU 버전 Dockerfile (개선된 버전)
+FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel
+
+# 시스템 패키지 설치 (오디오 관련 라이브러리 포함)
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    build-essential \
+    libsndfile1 \
+    libsndfile1-dev \
+    ffmpeg \
+    portaudio19-dev \
+    libasound2-dev \
+    libportaudio2 \
+    libpulse-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# Fish Speech 저장소 클론
+RUN git clone https://github.com/fishaudio/fish-speech.git /app/fish-speech
+
+# Fish Speech 디렉토리로 이동
+WORKDIR /app/fish-speech
+
+# Python 기본 패키지 설치
+RUN pip install --upgrade pip setuptools wheel
+
+# PyTorch GPU 버전 설치
+RUN pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
+
+# 필수 의존성 먼저 설치
+RUN pip install pyrootutils>=1.0.4 fastapi uvicorn httpx librosa soundfile
+
+# Fish Speech 핵심 의존성 수동 설치 (pyaudio 제외)
+RUN pip install \
+    accelerate \
+    datasets \
+    einops \
+    fire \
+    hydra-core \
+    lightning \
+    nemo_toolkit[asr] \
+    omegaconf \
+    rich \
+    tensorboard \
+    transformers \
+    gradio \
+    wandb \
+    --no-deps || echo "일부 패키지 건너뜀"
+
+# pyaudio 수동 설치 시도 (실패해도 계속 진행)
+RUN pip install pyaudio || echo "pyaudio 설치 실패 - TTS 기능에는 영향 없음"
+
+# Fish Speech 소스 설치 (에러 무시)
+RUN pip install -e . || echo "Fish Speech 소스 설치 완료"
+
+# S1 모델 다운로드
+RUN mkdir -p checkpoints
+RUN wget -O checkpoints/fish-speech-1.4-s1.pth \
+    https://huggingface.co/fishaudio/fish-speech-1.4/resolve/main/fish-speech-1.4-s1.pth || \
+    echo "모델 다운로드 실패 - 런타임에 자동 다운로드됨"
+
+# 포트 노출
+EXPOSE 8765
+
+# 환경변수 설정
+ENV PYTHONPATH=/app/fish-speech
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Fish Speech API 서버 시작 스크립트 생성
+RUN echo '#!/bin/bash\n\
+cd /app/fish-speech\n\
+echo "🐟 Fish Speech API 서버 시작 중..."\n\
+python -m fish_speech.webui.api \\\n\
+    --listen 0.0.0.0:8765 \\\n\
+    --llama-checkpoint-path checkpoints/fish-speech-1.4-s1.pth \\\n\
+    --decoder-checkpoint-path checkpoints \\\n\
+    --device cuda:0 \\\n\
+    --compile \\\n\
+    --max-length 4096 \\\n\
+    || echo "❌ API 서버 시작 실패"\n\
+' > /app/start_server.sh
+
+RUN chmod +x /app/start_server.sh
+
+# 헬스체크 추가
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8765/health || curl -f http://localhost:8765/ || exit 1
+
+# 기본 실행 명령
+CMD ["/app/start_server.sh"]

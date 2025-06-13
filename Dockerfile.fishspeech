@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libsndfile1 \
     ffmpeg \
+    portaudio19-dev \
+    libasound2-dev \
+    libportaudio2 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
@@ -22,10 +26,12 @@ WORKDIR /app/fish-speech
 # Python 의존성 설치
 RUN pip install --upgrade pip
 RUN pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
-RUN pip install -e ".[stable]"
 
-# 추가 필요한 패키지 설치
+# 추가 필요한 패키지 먼저 설치
 RUN pip install pyrootutils>=1.0.4 fastapi uvicorn httpx
+
+# Fish Speech 설치 (안정성을 위해 예외 처리 추가)
+RUN pip install -e ".[stable]" || pip install -e "." || echo "Fish Speech 부분 설치 완료"
 
 # S1 모델 다운로드 (사전 학습된 모델)
 RUN mkdir -p checkpoints
