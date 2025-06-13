@@ -127,57 +127,67 @@ class FishSpeechTTSService:
             return
         
         try:
-            # API 서버 시작 명령어
-            model_path = self.fish_speech_dir / "checkpoints" / "openaudio-s1-mini"
-            codec_path = model_path / "codec.pth"
+            # start_fish_speech_server.py 스크립트 사용
+            backend_dir = Path(__file__).parent.parent.parent
+            server_script = backend_dir / "start_fish_speech_server.py"
             
-            cmd = [
-                "python", "-m", "tools.api_server",
-                "--listen", f"127.0.0.1:8765",
-                "--llama-checkpoint-path", str(model_path),
-                "--decoder-checkpoint-path", str(codec_path),
-                "--decoder-config-name", "modded_dac_vq",
-                "--compile"  # 성능 향상을 위한 컴파일
-            ]
+            if not server_script.exists():
+                raise Exception(f"Fish Speech 서버 스크립트를 찾을 수 없습니다: {server_script}")
             
-            logger.info(f"API 서버 실행 명령: {' '.join(cmd)}")
-            
-            # 백그라운드에서 API 서버 실행
+            # 백그라운드에서 서버 시작
             self.api_server_process = subprocess.Popen(
-                cmd,
-                cwd=self.fish_speech_dir,
+                ["python", str(server_script), "start"],
+                cwd=backend_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
             )
             
-            logger.info(f"API 서버 프로세스 시작 - PID: {self.api_server_process.pid}")
+            logger.info(f"Fish Speech API 서버 시작 - PID: {self.api_server_process.pid}")
+            
+            # 서버가 시작될 시간을 좀 더 줌
+            await asyncio.sleep(5)
             
         except Exception as e:
             logger.error(f"API 서버 시작 실패: {e}")
             raise Exception(f"Fish Speech API 서버를 시작할 수 없습니다: {str(e)}")
     
     async def _is_api_server_running(self) -> bool:
-        """API 서버 실행 상태 확인"""
+        """API 서버 실행 상태 확인 (health 및 root 엔드포인트 체크)"""
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(f"{self.api_url}/health", timeout=2)
-                return response.status_code == 200
+                # 여러 엔드포인트 시도
+                endpoints = ["/health", "/", "/docs"]
+                
+                for endpoint in endpoints:
+                    try:
+                        response = await client.get(f"{self.api_url}{endpoint}", timeout=3)
+                        if response.status_code in [200, 404]:  # 404도 서버가 응답하는 것
+                            logger.debug(f"API 서버 응답 확인: {endpoint} -> {response.status_code}")
+                            return True
+                    except:
+                        continue
+                        
+                return False
         except:
             return False
     
-    async def _wait_for_api_server(self, timeout: int = 60):
-        """API 서버 준비 대기"""
-        logger.info("API 서버 준비 대기...")
+    async def _wait_for_api_server(self, timeout: int = 90):
+        """API 서버 준비 대기 (시간 연장)"""
+        logger.info("API 서버 준비 대기... (최대 90초)")
         
         start_time = time.time()
+        wait_count = 0
         while time.time() - start_time < timeout:
             if await self._is_api_server_running():
                 logger.info("✅ API 서버 준비 완료")
                 return
             
-            await asyncio.sleep(2)
-            logger.info("API 서버 대기 중...")
+            await asyncio.sleep(3)  # 좀 더 여유있게 대기
+            wait_count += 1
+            if wait_count % 10 == 0:  # 30초마다 로그
+                elapsed = int(time.time() - start_time)
+                logger.info(f"API 서버 대기 중... ({elapsed}초 경과)")
         
         raise Exception(f"API 서버가 {timeout}초 내에 준비되지 않았습니다")
     
