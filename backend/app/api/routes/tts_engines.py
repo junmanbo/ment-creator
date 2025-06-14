@@ -33,14 +33,6 @@ def get_tts_engines():
                 "features": ["voice_cloning", "multilingual", "open_source"],
                 "performance": "medium",
                 "quality": "good"
-            },
-            {
-                "name": TTSEngine.FISH_SPEECH,
-                "display_name": "Fish Speech",
-                "description": "SOTA 오픈소스 TTS with 한국어 최적화",
-                "features": ["voice_cloning", "multilingual", "high_quality", "fast"],
-                "performance": "high", 
-                "quality": "excellent"
             }
         ],
         "current_engine": get_current_tts_engine(),
@@ -55,7 +47,7 @@ def get_current_engine():
         "current_engine": current,
         "engine_info": {
             "name": current.value if current else None,
-            "display_name": "Fish Speech" if current == TTSEngine.FISH_SPEECH else "Coqui TTS" if current == TTSEngine.COQUI else None,
+            "display_name": "Coqui TTS" if current == TTSEngine.COQUI else None,
             "status": "active" if current else "not_initialized"
         }
     }
@@ -162,19 +154,19 @@ async def get_engines_status(
                     status_results[engine.value] = {
                         "available": True,
                         "initialized": service.model_loaded,
-                        "description": "Fish Speech TTS" if engine == TTSEngine.FISH_SPEECH else "Coqui TTS"
+                        "description": "Coqui TTS"
                     }
                 else:
                     status_results[engine.value] = {
                         "available": True,
                         "initialized": False,
-                        "description": "Fish Speech TTS" if engine == TTSEngine.FISH_SPEECH else "Coqui TTS"
+                        "description": "Coqui TTS"
                     }
             except Exception as e:
                 status_results[engine.value] = {
                     "available": False,
                     "error": str(e),
-                    "description": "Fish Speech TTS" if engine == TTSEngine.FISH_SPEECH else "Coqui TTS"
+                    "description": "Coqui TTS"
                 }
         
         return {
@@ -224,50 +216,32 @@ def get_engine_recommendations():
     return {
         "recommendations": [
             {
-                "engine": TTSEngine.FISH_SPEECH,
-                "title": "🐟 Fish Speech (추천)",
-                "pros": [
-                    "최고 품질의 한국어 TTS",
-                    "빠른 생성 속도 (1:7 실시간 비율)",
-                    "뛰어난 Voice Cloning 성능",
-                    "10-30초 샘플로 음성 복제",
-                    "최신 SOTA 모델"
-                ],
-                "cons": [
-                    "설치 과정이 복잡할 수 있음",
-                    "GPU 메모리 사용량이 높음"
-                ],
-                "use_cases": [
-                    "고품질 음성이 필요한 프로덕션 환경",
-                    "빠른 TTS 생성이 중요한 경우",
-                    "한국어 TTS 품질이 중요한 프로젝트"
-                ]
-            },
-            {
                 "engine": TTSEngine.COQUI,
                 "title": "🎙️ Coqui TTS",
                 "pros": [
                     "안정적이고 검증된 솔루션",
                     "상대적으로 설정이 간단",
                     "다양한 언어 지원",
-                    "오픈소스 생태계"
+                    "오픈소스 생태계",
+                    "Voice Cloning 지원"
                 ],
                 "cons": [
-                    "Fish Speech보다 품질이 낮음",
-                    "생성 속도가 상대적으로 느림",
-                    "PyTorch 호환성 문제"
+                    "PyTorch 호환성 문제",
+                    "GPU 메모리 사용량",
+                    "생성 속도"
                 ],
                 "use_cases": [
                     "테스트 및 개발 환경",
                     "기본적인 TTS 기능이 필요한 경우",
-                    "안정성이 우선인 프로젝트"
+                    "안정성이 우선인 프로젝트",
+                    "다국어 지원이 필요한 경우"
                 ]
             }
         ],
         "quick_decision": {
-            "for_production": TTSEngine.FISH_SPEECH,
+            "for_production": TTSEngine.COQUI,
             "for_development": TTSEngine.COQUI,
-            "for_korean_quality": TTSEngine.FISH_SPEECH,
+            "for_korean_quality": TTSEngine.COQUI,
             "for_stability": TTSEngine.COQUI
         }
     }

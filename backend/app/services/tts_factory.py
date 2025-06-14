@@ -1,6 +1,6 @@
 """
 TTS 서비스 팩토리
-Coqui TTS와 Fish Speech 간 쉬운 전환을 위한 팩토리 패턴
+다양한 TTS 엔진을 관리하는 팩토리 패턴
 """
 
 import os
@@ -12,18 +12,10 @@ from app.services.tts_service import TTSService
 
 logger = logging.getLogger(__name__)
 
-try:
-    from app.services.fish_speech_tts_service import FishSpeechTTSService
-    FISH_SPEECH_AVAILABLE = True
-except ImportError:
-    logger.warning("Fish Speech TTS 서비스를 불러올 수 없습니다. Mock 서비스를 사용합니다.")
-    FISH_SPEECH_AVAILABLE = False
-    from app.services.mock.fish_speech_mock_service import FishSpeechMockTTSService as FishSpeechTTSService
-
 class TTSEngine(str, Enum):
     """지원되는 TTS 엔진"""
     COQUI = "coqui"
-    FISH_SPEECH = "fish_speech"
+    # MOCK = "mock"  # 향후 Mock TTS 엔진 추가 가능
 
 class TTSServiceFactory:
     """TTS 서비스 팩토리"""
@@ -38,16 +30,16 @@ class TTSServiceFactory:
         return cls._instance
     
     def __init__(self):
-        # 환경변수에서 기본 TTS 엔진 설정 (기본값: Fish Speech)
+        # 환경변수에서 기본 TTS 엔진 설정 (기본값: Coqui TTS)
         self.default_engine = TTSEngine(
-            os.getenv("TTS_ENGINE", TTSEngine.FISH_SPEECH)
+            os.getenv("TTS_ENGINE", TTSEngine.COQUI)
         )
         logger.info(f"기본 TTS 엔진: {self.default_engine}")
     
     def get_tts_service(
         self, 
         engine: Optional[TTSEngine] = None
-    ) -> Union[TTSService, FishSpeechTTSService]:
+    ) -> TTSService:
         """
         TTS 서비스 인스턴스 반환
         
@@ -69,12 +61,6 @@ class TTSServiceFactory:
         if target_engine == TTSEngine.COQUI:
             self._current_service = TTSService()
             logger.info("✅ Coqui TTS 서비스 로드")
-        elif target_engine == TTSEngine.FISH_SPEECH:
-            self._current_service = FishSpeechTTSService()
-            if FISH_SPEECH_AVAILABLE:
-                logger.info("🐟 Fish Speech TTS 서비스 로드")
-            else:
-                logger.info("🐟 Fish Speech Mock TTS 서비스 로드 (테스트용)")
         else:
             raise ValueError(f"지원되지 않는 TTS 엔진: {target_engine}")
         
@@ -218,11 +204,11 @@ class TTSServiceFactory:
 tts_factory = TTSServiceFactory()
 
 # 편의를 위한 함수들
-def get_tts_service(engine: Optional[TTSEngine] = None):
+def get_tts_service(engine: Optional[TTSEngine] = None) -> TTSService:
     """현재 설정된 TTS 서비스 반환"""
     return tts_factory.get_tts_service(engine)
 
-def switch_tts_engine(engine: TTSEngine):
+def switch_tts_engine(engine: TTSEngine) -> TTSService:
     """TTS 엔진 전환"""
     return tts_factory.switch_engine(engine)
 
