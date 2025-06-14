@@ -4,7 +4,7 @@ services:
   fish-speech-gpu:
     build:
       context: .
-      dockerfile: Dockerfile.fishspeech.v2
+      dockerfile: Dockerfile.fishspeech.fixed
     container_name: fish-speech-api-gpu
     restart: unless-stopped
     ports:
@@ -32,32 +32,6 @@ services:
       - default
     profiles:
       - gpu
-      
-  # Fish Speech TTS API 서버 (CPU 버전)
-  fish-speech-cpu:
-    build:
-      context: .
-      dockerfile: Dockerfile.fishspeech-cpu.v2
-    container_name: fish-speech-api-cpu
-    restart: unless-stopped
-    ports:
-      - "8765:8765"
-    volumes:
-      - fish-speech-models:/app/fish-speech/checkpoints
-      - fish-speech-cache:/root/.cache
-    environment:
-      - CUDA_VISIBLE_DEVICES=""
-      - PYTHONPATH=/app/fish-speech
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - default
-    profiles:
-      - cpu
 
   db:
     image: postgres:17
