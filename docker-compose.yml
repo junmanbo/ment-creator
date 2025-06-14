@@ -1,38 +1,5 @@
 services:
 
-  # Fish Speech TTS API 서버 (GPU 버전)
-  fish-speech-gpu:
-    build:
-      context: .
-      dockerfile: Dockerfile.fishspeech.fixed
-    container_name: fish-speech-api-gpu
-    restart: unless-stopped
-    ports:
-      - "8765:8765"
-    volumes:
-      - fish-speech-models:/app/fish-speech/checkpoints
-      - fish-speech-cache:/root/.cache
-    environment:
-      - CUDA_VISIBLE_DEVICES=0
-      - PYTHONPATH=/app/fish-speech
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - default
-    profiles:
-      - gpu
-
   db:
     image: postgres:17
     restart: always
@@ -134,8 +101,6 @@ services:
   #     - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
   #     - SMTP_HOST=${SMTP_HOST}
   #     - SMTP_USER=${SMTP_USER}
-  #     - SMTP_PASSWORD=${SMTP_PASSWORD}
-  #     - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
   #     - POSTGRES_SERVER=db
   #     - POSTGRES_PORT=${POSTGRES_PORT}
   #     - POSTGRES_DB=${POSTGRES_DB}
@@ -197,10 +162,9 @@ services:
   #
   #     # Enable redirection for HTTP and HTTPS
   #     - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
+
 volumes:
   app-db-data:
-  fish-speech-models:
-  fish-speech-cache:
 
 # networks:
 #   traefik-public:

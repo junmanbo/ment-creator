@@ -205,6 +205,12 @@ training_logs/
 tensorboard_logs/
 wandb/
 
+# === Fish Speech 관련 파일들 (삭제 예정) ===
+Dockerfile.fishspeech*
+*fish-speech*
+FISH_SPEECH_*.md
+TTS_*.md
+
 # === Audio Files ===
 # Generated audio files
 audio_files/*
