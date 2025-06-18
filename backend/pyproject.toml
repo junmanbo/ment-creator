@@ -32,6 +32,9 @@ dependencies = [
     # 백그라운드 작업용
     "celery>=5.3.0",
     "redis>=5.0.0",
+    # 오디오 전처리용
+    "noisereduce>=3.0.0",
+    "pyloudnorm>=0.1.1",
 ]
 
 [build-system]

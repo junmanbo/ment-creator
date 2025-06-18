@@ -27,6 +27,9 @@ from app.models.tts import (
 # 🔄 TTS 서비스를 팩토리 패턴으로 교체
 from app.services.tts_factory import get_tts_service
 
+# 🎤 오디오 전처리 서비스 추가
+from app.services.audio.audio_preprocessor import audio_preprocessor
+
 # TTS Generation with Script info
 class TTSGenerationWithScript(TTSGenerationPublic):
     script: Optional[TTSScriptPublic] = None
@@ -942,6 +945,265 @@ def get_tts_library_categories(
     
     categories = session.exec(statement).all()
     return [cat for cat in categories if cat]  # None 값 제거
+
+# === 오디오 전처리 엔드포인트 ===
+
+@router.post("/audio/preprocess")
+async def preprocess_audio(
+    *,
+    current_user: CurrentUser,
+    audio_file: UploadFile = File(...),
+    apply_noise_reduction: bool = Form(True),
+    apply_normalization: bool = Form(True),
+    apply_silence_trim: bool = Form(True),
+    apply_voice_enhancement: bool = Form(True)
+):
+    """음성 샘플 전처리 (Voice Cloning 최적화)"""
+    logger.info(f"🎤 Audio preprocessing requested by user {current_user.id}")
+    logger.info(f"File: {audio_file.filename}, Size: {audio_file.size} bytes")
+    
+    # 파일 검증
+    if not audio_file.content_type or not audio_file.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="오디오 파일만 업로드 가능합니다.")
+    
+    # 임시 파일로 저장
+    temp_dir = Path("temp_audio")
+    temp_dir.mkdir(exist_ok=True)
+    
+    temp_input = temp_dir / f"input_{uuid.uuid4().hex[:8]}_{audio_file.filename}"
+    
+    try:
+        # 파일 저장
+        with open(temp_input, "wb") as buffer:
+            content = await audio_file.read()
+            buffer.write(content)
+        
+        # 전처리 옵션 설정
+        apply_all = (
+            apply_noise_reduction and 
+            apply_normalization and 
+            apply_silence_trim and 
+            apply_voice_enhancement
+        )
+        
+        # 전처리 수행
+        processed_path, processing_info = audio_preprocessor.preprocess_for_voice_cloning(
+            str(temp_input),
+            apply_all=apply_all
+        )
+        
+        # 원본 파일 분석
+        original_analysis = audio_preprocessor.analyze_audio(str(temp_input))
+        
+        # 처리된 파일 분석
+        processed_analysis = audio_preprocessor.analyze_audio(processed_path)
+        
+        # 개선 사항 추천
+        recommendations = audio_preprocessor.recommend_improvements(original_analysis)
+        
+        # 결과 반환
+        return {
+            "message": "오디오 전처리 완료",
+            "original": {
+                "filename": audio_file.filename,
+                "sample_rate": original_analysis["sample_rate"],
+                "duration": f"{original_analysis['duration']:.2f}초",
+                "quality_score": f"{original_analysis['quality_score']:.1f}/100",
+                "db_level": f"{original_analysis['db_level']:.1f} dB"
+            },
+            "processed": {
+                "filename": Path(processed_path).name,
+                "sample_rate": processed_analysis["sample_rate"],
+                "duration": f"{processed_analysis['duration']:.2f}초",
+                "quality_score": f"{processed_analysis['quality_score']:.1f}/100",
+                "db_level": f"{processed_analysis['db_level']:.1f} dB",
+                "download_url": f"/api/v1/voice-actors/audio/download/{Path(processed_path).name}"
+            },
+            "improvements": {
+                "applied_processes": processing_info["applied_processes"],
+                "quality_improvement": f"+{processed_analysis['quality_score'] - original_analysis['quality_score']:.1f}점",
+                "recommendations": recommendations
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Audio preprocessing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"오디오 전처리 중 오류 발생: {str(e)}")
+    finally:
+        # 임시 파일 정리
+        if temp_input.exists():
+            temp_input.unlink()
+
+@router.post("/audio/analyze")
+async def analyze_audio(
+    *,
+    current_user: CurrentUser,
+    audio_file: UploadFile = File(...)
+):
+    """음성 파일 분석 (전처리 없이)"""
+    logger.info(f"🔍 Audio analysis requested by user {current_user.id}")
+    
+    # 파일 검증
+    if not audio_file.content_type or not audio_file.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="오디오 파일만 분석 가능합니다.")
+    
+    # 임시 파일로 저장
+    temp_dir = Path("temp_audio")
+    temp_dir.mkdir(exist_ok=True)
+    
+    temp_file = temp_dir / f"analyze_{uuid.uuid4().hex[:8]}_{audio_file.filename}"
+    
+    try:
+        # 파일 저장
+        with open(temp_file, "wb") as buffer:
+            content = await audio_file.read()
+            buffer.write(content)
+        
+        # 분석 수행
+        analysis = audio_preprocessor.analyze_audio(str(temp_file))
+        
+        # 개선 사항 추천
+        recommendations = audio_preprocessor.recommend_improvements(analysis)
+        
+        return {
+            "filename": audio_file.filename,
+            "analysis": {
+                "sample_rate": f"{analysis['sample_rate']} Hz",
+                "duration": f"{analysis['duration']:.2f}초",
+                "channels": analysis["channels"],
+                "peak_amplitude": f"{analysis['peak_amplitude']:.3f}",
+                "rms_level": f"{analysis['rms_level']:.3f}",
+                "db_level": f"{analysis['db_level']:.1f} dB",
+                "clipping_samples": analysis["clipping_samples"],
+                "silence_ratio": f"{analysis['silence_ratio']*100:.1f}%",
+                "quality_score": f"{analysis['quality_score']:.1f}/100"
+            },
+            "recommendations": recommendations,
+            "voice_cloning_ready": analysis["quality_score"] >= 70
+        }
+        
+    except Exception as e:
+        logger.error(f"Audio analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"오디오 분석 중 오류 발생: {str(e)}")
+    finally:
+        # 임시 파일 정리
+        if temp_file.exists():
+            temp_file.unlink()
+
+@router.get("/audio/download/{filename}")
+def download_preprocessed_audio(
+    *,
+    filename: str,
+    current_user: CurrentUser
+) -> StreamingResponse:
+    """전처리된 오디오 파일 다운로드"""
+    file_path = Path("preprocessed_audio") / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    
+    # 보안을 위해 파일명 검증
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="잘못된 파일명입니다.")
+    
+    def iterfile():
+        with open(file_path, "rb") as file:
+            while chunk := file.read(1024):
+                yield chunk
+    
+    return StreamingResponse(
+        iterfile(), 
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+@router.post("/audio/batch-preprocess")
+async def batch_preprocess_audio(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    voice_actor_id: uuid.UUID = Form(...),
+    process_all_samples: bool = Form(False)
+):
+    """성우의 모든 음성 샘플 일괄 전처리"""
+    logger.info(f"🎤 Batch audio preprocessing for voice actor {voice_actor_id}")
+    
+    # 성우 확인
+    voice_actor = session.get(VoiceActor, voice_actor_id)
+    if not voice_actor:
+        raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
+    
+    # 음성 샘플 조회
+    samples = session.exec(
+        select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
+    ).all()
+    
+    if not samples:
+        raise HTTPException(status_code=404, detail="처리할 음성 샘플이 없습니다.")
+    
+    # 처리할 파일 목록
+    input_files = []
+    for sample in samples:
+        if Path(sample.audio_file_path).exists():
+            input_files.append(sample.audio_file_path)
+    
+    if not input_files:
+        raise HTTPException(status_code=404, detail="유효한 음성 파일이 없습니다.")
+    
+    try:
+        # 일괄 전처리
+        output_dir = Path("preprocessed_audio") / str(voice_actor_id)
+        results = audio_preprocessor.batch_preprocess(input_files, str(output_dir))
+        
+        # 결과 정리
+        processed_count = 0
+        failed_count = 0
+        total_quality_improvement = 0
+        
+        for i, (processed_path, info) in enumerate(results):
+            if processed_path and "error" not in info:
+                processed_count += 1
+                
+                # 품질 향상도 계산
+                original_analysis = audio_preprocessor.analyze_audio(input_files[i])
+                processed_analysis = audio_preprocessor.analyze_audio(processed_path)
+                quality_improvement = processed_analysis["quality_score"] - original_analysis["quality_score"]
+                total_quality_improvement += quality_improvement
+                
+                # 선택적으로 원본 파일 교체
+                if process_all_samples:
+                    # 백업 생성
+                    backup_path = Path(input_files[i]).with_suffix(".bak")
+                    Path(input_files[i]).rename(backup_path)
+                    
+                    # 전처리된 파일로 교체
+                    Path(processed_path).rename(input_files[i])
+                    
+                    logger.info(f"Replaced original file: {input_files[i]}")
+            else:
+                failed_count += 1
+        
+        avg_quality_improvement = (
+            total_quality_improvement / processed_count if processed_count > 0 else 0
+        )
+        
+        return {
+            "message": "일괄 전처리 완료",
+            "voice_actor": voice_actor.name,
+            "results": {
+                "total_samples": len(samples),
+                "processed": processed_count,
+                "failed": failed_count,
+                "average_quality_improvement": f"+{avg_quality_improvement:.1f}점",
+                "files_replaced": process_all_samples
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Batch preprocessing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"일괄 전처리 중 오류 발생: {str(e)}")
 
 # === 디버깅 엔드포인트 ===
 

@@ -383,6 +383,7 @@ grafana_data/
 *.old
 *.orig
 *.save
+*_old.py
 
 # === Configuration Overrides ===
 config.local.py
