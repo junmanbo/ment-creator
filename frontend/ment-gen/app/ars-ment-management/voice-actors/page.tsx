@@ -8,6 +8,16 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
@@ -20,7 +30,8 @@ import {
   Loader2,
   Upload,
   Volume2,
-  X
+  X,
+  Trash2
 } from "lucide-react"
 
 interface VoiceActor {
@@ -100,6 +111,11 @@ export default function VoiceActorsPage() {
   
   // 오디오 재생 상태
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
+  
+  // 삭제 관련 상태
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [actorToDelete, setActorToDelete] = useState<VoiceActor | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   
   const { toast } = useToast()
 
@@ -222,6 +238,64 @@ export default function VoiceActorsPage() {
         description: "서버와의 연결에 문제가 있습니다.",
         variant: "destructive",
       })
+    }
+  }
+
+  const deleteVoiceActor = async () => {
+    if (!actorToDelete) return
+    
+    setIsDeleting(true)
+    
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/voice-actors/${actorToDelete.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        // 목록에서 삭제된 성우 제거
+        setVoiceActors(voiceActors.filter(actor => actor.id !== actorToDelete.id))
+        
+        // 선택된 성우가 삭제된 성우인 경우 선택 해제
+        if (selectedActor?.id === actorToDelete.id) {
+          setSelectedActor(null)
+          setVoiceSamples([])
+        }
+        
+        // TTS 생성에서 선택된 성우가 삭제된 경우 선택 해제
+        if (selectedActorForTts === actorToDelete.id) {
+          setSelectedActorForTts("")
+        }
+        
+        toast({
+          title: "삭제 완료",
+          description: `${actorToDelete.name} 성우가 삭제되었습니다.`,
+        })
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "삭제 실패",
+          description: errorData.detail || "성우 삭제에 실패했습니다.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Delete voice actor error:", error)
+      toast({
+        title: "네트워크 오류",
+        description: "서버와의 연결에 문제가 있습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+      setActorToDelete(null)
     }
   }
 
@@ -666,10 +740,35 @@ export default function VoiceActorsPage() {
         </TabsList>
 
         <TabsContent value="actors">
+          {voiceActors.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 mb-4">등록된 성우가 없습니다.</p>
+              <Button
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                첫 번째 성우 등록하기
+              </Button>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {voiceActors.map((actor) => (
-              <Card key={actor.id} className="cursor-pointer hover:shadow-md transition-shadow" 
-                    onClick={() => setSelectedActor(actor)}>
+              <Card key={actor.id} className="relative hover:shadow-md transition-shadow">
+                {/* 삭제 버튼 - 눈에 잘 띠수 있게 빨간색으로 */}
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2 z-10 h-8 w-8"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActorToDelete(actor)
+                    setDeleteDialogOpen(true)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                
+                <div className="cursor-pointer" onClick={() => setSelectedActor(actor)}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-lg">{actor.name}</CardTitle>
@@ -704,9 +803,11 @@ export default function VoiceActorsPage() {
                     </span>
                   </div>
                 </CardFooter>
+                </div>
               </Card>
             ))}
           </div>
+          )}
 
           {/* 선택된 성우 상세 정보 */}
           {selectedActor && (
@@ -714,16 +815,28 @@ export default function VoiceActorsPage() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>{selectedActor.name} 상세 정보</CardTitle>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setUploadingActor(selectedActor)
-                      setIsUploadDialogOpen(true)
-                    }}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    샘플 업로드
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setUploadingActor(selectedActor)
+                        setIsUploadDialogOpen(true)
+                      }}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      샘플 업로드
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        setActorToDelete(selectedActor)
+                        setDeleteDialogOpen(true)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      성우 삭제
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -976,6 +1089,38 @@ export default function VoiceActorsPage() {
           </div>
         </TabsContent>
       </Tabs>
+      
+      {/* 삭제 확인 다이얼로그 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>성우 삭제 확인</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-semibold">{actorToDelete?.name}</span> 성우를 삭제하시겠습니까?
+              <br />
+              <br />
+              이 작업은 취소할 수 없으며, 해당 성우의 모든 음성 샘플과 생성된 TTS 파일들도 함께 삭제됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteVoiceActor}
+              disabled={isDeleting}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  삭제 중...
+                </>
+              ) : (
+                "삭제"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
