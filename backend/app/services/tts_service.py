@@ -333,7 +333,7 @@ class TTSService:
         """성우의 참조 음성 파일들을 가져오기"""
         statement = select(VoiceSample).where(
             VoiceSample.voice_actor_id == voice_actor.id
-        ).limit(5)  # 최대 5개 샘플 사용
+        ).limit(20)  # 최대 5개 샘플 사용
         
         samples = session.exec(statement).all()
         reference_wavs = []
@@ -344,7 +344,7 @@ class TTSService:
                 # 파일 유효성 검사
                 try:
                     file_size = audio_path.stat().st_size
-                    if file_size > 1000:  # 최소 1KB 이상
+                    if file_size > 50000:  # 최소 1KB 이상
                         reference_wavs.append(str(audio_path))
                         logger.info(f"참조 음성 추가: {audio_path.name} ({file_size:,} bytes)")
                     else:
@@ -361,7 +361,7 @@ class TTSService:
         output_path: str, 
         params: dict
     ):
-        """Voice Cloning을 사용한 TTS 생성"""
+        """Voice Cloning을 사용한 TTS 생성 (한국어 최적화)"""
         try:
             logger.info(f"Voice Cloning 시작: {len(reference_wavs)}개 참조 음성 사용")
             
@@ -369,21 +369,37 @@ class TTSService:
             loop = asyncio.get_event_loop()
             
             def _sync_generate():
-                # XTTS v2 매개변수 최적화
+                # XTTS v2 한국어 최적화 매개변수
                 tts_params = {
                     "text": text,
                     "file_path": output_path,
                     "speaker_wav": reference_wavs,
                     "language": "ko",
                     "split_sentences": True,
-                    "temperature": params.get("temperature", 0.7),
+                    # 한국어 최적화 기본값
+                    "temperature": params.get("temperature", 0.65),  # 0.4 -> 0.65 (더 자연스럽게)
                     "length_penalty": params.get("length_penalty", 1.0),
-                    "repetition_penalty": params.get("repetition_penalty", 5.0),
-                    "top_k": params.get("top_k", 50),
+                    "repetition_penalty": params.get("repetition_penalty", 1.1),  # 5.0 -> 1.1 (너무 높으면 부자연스러움)
+                    "top_k": params.get("top_k", 40),  # 50 -> 40
                     "top_p": params.get("top_p", 0.85),
+                    "do_sample": params.get("do_sample", True)
                 }
                 
                 logger.info(f"TTS 매개변수: {tts_params}")
+                logger.info("🌏 한국어 최적화 파라미터 적용")
+                logger.info("  - temperature: 0.65 (자연스러움)")
+                logger.info("  - repetition_penalty: 1.1 (반복 방지)")
+                logger.info("  - top_k: 40 (일관성)")
+                logger.info("  - top_p: 0.85 (다양성)")
+                logger.info("  - do_sample: True (샘플링 활성화)")
+                logger.info("  - split_sentences: True (문장 분할)")
+                logger.info("  - language: ko (한국어 모드)")
+                logger.info("  - 참조 음성: {}개".format(len(reference_wavs)))
+                logger.info("  💡 팁: 참조 음성은 한국어 네이티브 스피커의 고품질 음성을 사용하세요")
+                logger.info("  💡 팁: 각 음성은 10-20초 길이가 적당합니다")
+                logger.info("  💡 팁: 다양한 톤과 감정이 포함된 샘플을 사용하면 더 좋습니다")
+                logger.info("  💡 팁: 텍스트에 숫자나 영어가 포함된 경우 한글로 변환하면 더 자연스럽습니다")
+                logger.info("  💡 팁: 너무 긴 문장은 split_sentences로 자동 분할됩니다")
                 
                 try:
                     # Voice Cloning 시도

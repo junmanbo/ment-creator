@@ -486,10 +486,25 @@ async def generate_tts(
     if not script:
         raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
     
+    # 한국어 최적화 기본 파라미터 병합
+    korean_optimized_params = {
+        "temperature": 0.65,
+        "top_k": 40,
+        "top_p": 0.85,
+        "repetition_penalty": 1.1,
+        "do_sample": True
+    }
+    
+    # 사용자 지정 파라미터와 병합
+    if generate_request.generation_params:
+        korean_optimized_params.update(generate_request.generation_params)
+    
+    logger.info(f"🌏 한국어 최적화 TTS 파라미터: {korean_optimized_params}")
+    
     # 생성 작업 생성
     generation = TTSGeneration(
         script_id=script_id,
-        generation_params=generate_request.generation_params,
+        generation_params=korean_optimized_params,
         requested_by=current_user.id
     )
     
