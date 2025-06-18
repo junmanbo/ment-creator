@@ -1326,16 +1326,82 @@ def delete_voice_actor(
     voice_actor_id: uuid.UUID,
     current_user: CurrentUser
 ):
-    """성우 삭제 (비활성화)"""
+    """성우 삭제 (비활성화 및 관련 파일 삭제)"""
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
     
+    logger.info(f"🗑️ Deleting voice actor {voice_actor.name} (ID: {voice_actor_id})")
+    
+    # 1. 해당 성우의 모든 음성 샘플 조회 및 파일 삭제
+    samples = session.exec(
+        select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
+    ).all()
+    
+    deleted_sample_count = 0
+    for sample in samples:
+        if sample.audio_file_path:
+            try:
+                file_path = Path(sample.audio_file_path)
+                if file_path.exists():
+                    file_path.unlink()
+                    deleted_sample_count += 1
+                    logger.info(f"✅ Deleted sample file: {file_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to delete sample file {sample.audio_file_path}: {e}")
+        
+        # DB에서 샘플 레코드 삭제
+        session.delete(sample)
+    
+    # 2. 해당 성우로 생성된 모든 TTS 파일 삭제
+    # 먼저 해당 성우의 TTS 스크립트 찾기
+    scripts = session.exec(
+        select(TTSScript).where(TTSScript.voice_actor_id == voice_actor_id)
+    ).all()
+    
+    deleted_tts_count = 0
+    for script in scripts:
+        # 각 스크립트의 생성된 TTS 파일 찾기
+        generations = session.exec(
+            select(TTSGeneration).where(TTSGeneration.script_id == script.id)
+        ).all()
+        
+        for generation in generations:
+            if generation.audio_file_path:
+                try:
+                    file_path = Path(generation.audio_file_path)
+                    if file_path.exists():
+                        file_path.unlink()
+                        deleted_tts_count += 1
+                        logger.info(f"✅ Deleted TTS file: {file_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to delete TTS file {generation.audio_file_path}: {e}")
+    
+    # 3. 샘플 디렉토리 정리 (빈 디렉토리 삭제)
+    try:
+        samples_dir = Path("voice_samples") / str(voice_actor_id)
+        if samples_dir.exists() and not any(samples_dir.iterdir()):
+            samples_dir.rmdir()
+            logger.info(f"✅ Removed empty samples directory: {samples_dir}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to remove samples directory: {e}")
+    
+    # 4. 성우 비활성화 (soft delete)
     voice_actor.is_active = False
     session.add(voice_actor)
     session.commit()
     
-    return {"message": "성우가 비활성화되었습니다."}
+    logger.info(f"✅ Voice actor {voice_actor.name} deleted successfully. "
+                f"Deleted {deleted_sample_count} sample files and {deleted_tts_count} TTS files.")
+    
+    return {
+        "message": f"성우가 삭제되었습니다.",
+        "details": {
+            "voice_actor_name": voice_actor.name,
+            "deleted_samples": deleted_sample_count,
+            "deleted_tts_files": deleted_tts_count
+        }
+    }
 
 @router.post("/{voice_actor_id}/samples", response_model=VoiceSamplePublic)
 async def upload_voice_sample(
