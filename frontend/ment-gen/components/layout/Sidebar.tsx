@@ -61,11 +61,7 @@ const menuItems: MenuItem[] = [
         href: "/scenarios/create",
         icon: FileText,
       },
-      {
-        title: "템플릿 관리",
-        href: "/scenarios/templates",
-        icon: FileText,
-      },
+
     ],
   },
   {
