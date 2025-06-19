@@ -344,7 +344,7 @@ class TTSService:
                 # 파일 유효성 검사
                 try:
                     file_size = audio_path.stat().st_size
-                    if file_size > 50000:  # 최소 1KB 이상
+                    if file_size > 100:  # 최소 1MB(1000000) 이상
                         reference_wavs.append(str(audio_path))
                         logger.info(f"참조 음성 추가: {audio_path.name} ({file_size:,} bytes)")
                     else:
@@ -377,11 +377,11 @@ class TTSService:
                     "language": "ko",
                     "split_sentences": True,
                     # 한국어 최적화 기본값
-                    "temperature": params.get("temperature", 0.65),  # 0.4 -> 0.65 (더 자연스럽게)
+                    "temperature": params.get("temperature", 0.55),  # 0.4 -> 0.65 (더 자연스럽게)
                     "length_penalty": params.get("length_penalty", 1.0),
                     "repetition_penalty": params.get("repetition_penalty", 1.1),  # 5.0 -> 1.1 (너무 높으면 부자연스러움)
                     "top_k": params.get("top_k", 40),  # 50 -> 40
-                    "top_p": params.get("top_p", 0.85),
+                    "top_p": params.get("top_p", 0.7),
                     "do_sample": params.get("do_sample", True)
                 }
                 

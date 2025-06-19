@@ -10,7 +10,7 @@ import noisereduce as nr
 from scipy.signal import butter, lfilter, savgol_filter
 from scipy.ndimage import median_filter
 import pyloudnorm as pyln
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 import logging
 from pathlib import Path
 import json
@@ -431,3 +431,193 @@ class AudioPreprocessor:
             json.dump(results, f, indent=2, ensure_ascii=False)
         
         return results
+    
+    def preprocess_for_voice_cloning(
+        self,
+        input_path: str,
+        apply_all: bool = True,
+        output_path: Optional[str] = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Voice Cloning에 최적화된 전처리를 수행합니다."""
+        if output_path is None:
+            input_p = Path(input_path)
+            output_dir = Path("preprocessed_audio")
+            output_dir.mkdir(exist_ok=True)
+            output_path = str(output_dir / f"{input_p.stem}_processed.wav")
+        
+        config = {
+            "denoise": apply_all,
+            "denoise_strength": 0.7,
+            "trim_silence": apply_all,
+            "silence_threshold": -40,
+            "normalize": apply_all,
+            "remove_low_freq": apply_all,
+            "low_freq_cutoff": 80,
+            "remove_high_freq": apply_all,
+            "high_freq_cutoff": 8000,
+            "apply_compression": apply_all,
+            "compression_ratio": 0.8,
+            "enhance_clarity": apply_all
+        }
+        
+        result = self.process_audio(input_path, output_path, config)
+        
+        processing_info = {
+            "applied_processes": [
+                key for key, value in config.items() 
+                if value is True and not key.endswith("_cutoff") and not key.endswith("_threshold")
+            ],
+            "quality_score": result.get("quality_score", 0),
+            "duration": result.get("duration_seconds", 0),
+            "sample_rate": result.get("sample_rate", self.target_sr)
+        }
+        
+        return output_path, processing_info
+    
+    def analyze_audio(self, file_path: str) -> Dict[str, Any]:
+        """오디오 파일을 분석합니다."""
+        try:
+            # 오디오 로드
+            audio, sr = librosa.load(file_path, sr=None, mono=False)
+            
+            # 모노로 변환 (스테레오인 경우)
+            if audio.ndim > 1:
+                audio_mono = librosa.to_mono(audio)
+                channels = audio.shape[0]
+            else:
+                audio_mono = audio
+                channels = 1
+            
+            # 기본 정보
+            duration = len(audio_mono) / sr
+            
+            # 진폭 분석
+            peak_amplitude = np.max(np.abs(audio_mono))
+            rms_level = np.sqrt(np.mean(audio_mono ** 2))
+            db_level = 20 * np.log10(rms_level + 1e-10)
+            
+            # 클리핑 검사
+            clipping_samples = np.sum(np.abs(audio_mono) >= 0.99)
+            
+            # 침묵 비율 계산
+            silence_threshold = 0.01
+            silence_samples = np.sum(np.abs(audio_mono) < silence_threshold)
+            silence_ratio = silence_samples / len(audio_mono)
+            
+            # 주파수 분석
+            spectral_centroid = np.mean(
+                librosa.feature.spectral_centroid(y=audio_mono, sr=sr)
+            )
+            
+            # 품질 점수 계산
+            quality_score = self._calculate_quality_score_from_analysis(
+                db_level, silence_ratio, duration, clipping_samples, peak_amplitude
+            )
+            
+            return {
+                "sample_rate": sr,
+                "duration": duration,
+                "channels": channels,
+                "peak_amplitude": float(peak_amplitude),
+                "rms_level": float(rms_level),
+                "db_level": float(db_level),
+                "clipping_samples": int(clipping_samples),
+                "silence_ratio": float(silence_ratio),
+                "spectral_centroid": float(spectral_centroid),
+                "quality_score": quality_score
+            }
+            
+        except Exception as e:
+            logger.error(f"Audio analysis failed: {e}")
+            raise
+    
+    def recommend_improvements(self, analysis: Dict[str, Any]) -> List[str]:
+        """분석 결과를 바탕으로 개선 사항을 추천합니다."""
+        recommendations = []
+        
+        # 볼륨 레벨 체크
+        if analysis["db_level"] < -30:
+            recommendations.append("🔊 볼륨이 너무 낮습니다. 정규화를 권장합니다.")
+        elif analysis["db_level"] > -10:
+            recommendations.append("🔊 볼륨이 너무 높습니다. 압축을 권장합니다.")
+        
+        # 클리핑 체크
+        if analysis["clipping_samples"] > 0:
+            recommendations.append("⚠️ 클리핑이 감지되었습니다. 볼륨을 낮추세요.")
+        
+        # 침묵 비율 체크
+        if analysis["silence_ratio"] > 0.3:
+            recommendations.append("🤫 침묵 구간이 많습니다. 트리밍을 권장합니다.")
+        
+        # 길이 체크
+        if analysis["duration"] < 3:
+            recommendations.append("⏱️ 너무 짧습니다. 3초 이상의 샘플을 권장합니다.")
+        elif analysis["duration"] > 30:
+            recommendations.append("⏱️ 너무 깁니다. 30초 이내로 편집하세요.")
+        
+        # 샘플레이트 체크
+        if analysis["sample_rate"] != 22050:
+            recommendations.append(f"🎵 샘플레이트를 22050Hz로 변경을 권장합니다. (현재: {analysis['sample_rate']}Hz)")
+        
+        # 품질 점수 기반 추천
+        if analysis["quality_score"] < 70:
+            recommendations.append("🎯 전체적인 품질 개선이 필요합니다. 전처리를 적용하세요.")
+        elif analysis["quality_score"] >= 90:
+            recommendations.append("✨ 우수한 품질입니다! Voice Cloning에 적합합니다.")
+        
+        return recommendations
+    
+    def _calculate_quality_score_from_analysis(
+        self,
+        db_level: float,
+        silence_ratio: float,
+        duration: float,
+        clipping_samples: int,
+        peak_amplitude: float
+    ) -> float:
+        """분석 결과로부터 품질 점수 계산"""
+        scores = []
+        
+        # 볼륨 점수 (목표: -23dB)
+        volume_diff = abs(db_level - (-23))
+        volume_score = max(0, 100 - volume_diff * 3)
+        scores.append(volume_score)
+        
+        # 침묵 비율 점수
+        silence_score = max(0, 100 - silence_ratio * 200)
+        scores.append(silence_score)
+        
+        # 길이 점수
+        if 3 <= duration <= 30:
+            duration_score = 100
+        elif duration < 3:
+            duration_score = duration / 3 * 100
+        else:
+            duration_score = max(0, 100 - (duration - 30) * 2)
+        scores.append(duration_score)
+        
+        # 클리핑 점수
+        if clipping_samples == 0:
+            clipping_score = 100
+        else:
+            clipping_score = max(0, 100 - clipping_samples / 100)
+        scores.append(clipping_score)
+        
+        # 피크 레벨 점수
+        if 0.3 <= peak_amplitude <= 0.95:
+            peak_score = 100
+        elif peak_amplitude < 0.3:
+            peak_score = peak_amplitude / 0.3 * 100
+        else:
+            peak_score = max(0, 100 - (peak_amplitude - 0.95) * 200)
+        scores.append(peak_score)
+        
+        # 가중 평균
+        weights = [0.2, 0.2, 0.2, 0.2, 0.2]
+        final_score = sum(s * w for s, w in zip(scores, weights))
+        
+        return round(final_score, 1)
+
+
+# 싱글톤 인스턴스 생성
+audio_preprocessor = AudioPreprocessor()
