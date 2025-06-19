@@ -131,7 +131,7 @@ export default function LoginPage() {
             <div className="flex justify-center">
               <div className="w-24 h-24 flex items-center justify-center">
                 <Image 
-                  src="/hanwha-logo.svg" 
+                  src="/hanwha-logo.png" 
                   alt="한화손해보험 로고" 
                   width={96} 
                   height={96}

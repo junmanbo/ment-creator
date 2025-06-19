@@ -103,7 +103,7 @@ export default function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
           <Link href="/" className="flex items-center space-x-2">
             <div className="flex items-center justify-center w-10 h-10">
               <Image 
-                src="/hanwha-logo.svg" 
+                src="/hanwha-logo.png" 
                 alt="한화손해보험 로고" 
                 width={40} 
                 height={40}
