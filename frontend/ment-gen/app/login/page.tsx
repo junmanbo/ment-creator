@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, Shield, Phone } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useAppDispatch, useAppSelector } from "../store/hooks"
 import { login, fetchUserProfile } from "../store/authSlice"
 
@@ -128,21 +129,24 @@ export default function LoginPage() {
           <div className="text-center space-y-6">
             {/* 로고 */}
             <div className="flex justify-center">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <div className="flex items-center space-x-1">
-                  <Shield className="h-8 w-8 text-white" />
-                  <Phone className="h-6 w-6 text-white" />
-                </div>
+              <div className="w-24 h-24 flex items-center justify-center">
+                <Image 
+                  src="/hanwha-logo.svg" 
+                  alt="한화손해보험 로고" 
+                  width={96} 
+                  height={96}
+                  className="w-24 h-24 drop-shadow-lg"
+                />
               </div>
             </div>
             
             {/* 시스템 제목 */}
             <div className="space-y-2">
               <h1 className="text-2xl font-bold text-gray-900">
-                손해보험 콜센터 ARS
+                한화손해보험
               </h1>
               <h2 className="text-lg font-semibold text-gray-600">
-                시나리오 관리 시스템
+                ARS 시나리오 관리 시스템
               </h2>
               <p className="text-sm text-gray-500">
                 음성 인공지능 기반 멘트 생성 및 관리 플랫폼
@@ -239,10 +243,10 @@ export default function LoginPage() {
         <div className="max-w-7xl mx-auto py-4 px-4">
           <div className="text-center">
             <p className="text-sm text-gray-600">
-              © 2025 손해보험사. All rights reserved.
+              © 2025 한화손해보험. All rights reserved.
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              ARS 시나리오 관리 시스템 v1.0
+              ARS 시나리오 관리 시스템 v2.1.0
             </p>
           </div>
         </div>
