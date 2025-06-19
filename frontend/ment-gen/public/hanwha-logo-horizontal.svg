@@ -1,0 +1,38 @@
+<svg width="120" height="40" viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 한화손해보험 가로형 로고 -->
+  <defs>
+    <linearGradient id="hanwhaOrangeHorizontal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6600;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF4500;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- 심볼 부분 -->
+  <g>
+    <!-- 배경 원형 -->
+    <circle cx="20" cy="20" r="16" fill="url(#hanwhaOrangeHorizontal)" stroke="#E55100" stroke-width="0.5"/>
+    
+    <!-- 한화 심볼 - H 모양 -->
+    <g transform="translate(20,20)">
+      <!-- 왼쪽 세로선 -->
+      <rect x="-7" y="-7" width="2" height="14" fill="white" rx="1"/>
+      <!-- 오른쪽 세로선 -->
+      <rect x="5" y="-7" width="2" height="14" fill="white" rx="1"/>
+      <!-- 중간 가로선 -->
+      <rect x="-7" y="-1" width="14" height="2" fill="white" rx="1"/>
+      
+      <!-- 내부 포인트 -->
+      <circle cx="0" cy="0" r="1" fill="white" opacity="0.9"/>
+    </g>
+  </g>
+  
+  <!-- HANWHA 텍스트 -->
+  <g transform="translate(45, 20)">
+    <text x="0" y="2" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333333">
+      HANWHA
+    </text>
+    <text x="0" y="14" font-family="Arial, sans-serif" font-size="8" font-weight="normal" fill="#666666">
+      손해보험
+    </text>
+  </g>
+</svg>

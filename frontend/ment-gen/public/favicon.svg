@@ -1,26 +1,22 @@
 <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- 한화손해보험 파비콘 -->
   <defs>
-    <linearGradient id="faviconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#FFA372;stop-opacity:1" />
+    <linearGradient id="faviconHanwha" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF5722;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D84315;stop-opacity:1" />
     </linearGradient>
   </defs>
   
-  <!-- 배경 원 -->
-  <circle cx="16" cy="16" r="15" fill="url(#faviconGradient)"/>
+  <!-- 메인 원형 -->
+  <circle cx="16" cy="16" r="15" fill="url(#faviconHanwha)"/>
   
-  <!-- 내부 디자인 -->
-  <g transform="translate(16,16)">
-    <!-- 중앙 원 -->
-    <circle cx="0" cy="0" r="6" fill="white" opacity="0.9"/>
-    
-    <!-- 원형 패턴 -->
-    <path d="M -4,-4 A 6,6 0 0,1 4,-4 A 4,4 0 0,1 4,4 A 6,6 0 0,1 -4,4 A 4,4 0 0,1 -4,-4 Z" 
-          fill="#FF6B35" opacity="0.7"/>
-    
-    <!-- 내부 심볼 -->
-    <circle cx="0" cy="0" r="2" fill="white"/>
-    <rect x="-1" y="-0.5" width="2" height="1" fill="#FF6B35"/>
+  <!-- 한화 심볼 - 파비콘용 심플한 H -->
+  <g transform="translate(16,16)" fill="white">
+    <rect x="-6" y="-7" width="2" height="14" rx="1"/>
+    <rect x="4" y="-7" width="2" height="14" rx="1"/>
+    <rect x="-6" y="-1" width="12" height="2" rx="1"/>
   </g>
+  
+  <!-- 중앙 포인트 -->
+  <circle cx="16" cy="16" r="1.5" fill="white" opacity="0.9"/>
 </svg>
