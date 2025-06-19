@@ -279,7 +279,7 @@ export default function Sidebar({ isOpen = true, onToggle, className }: SidebarP
         {isOpen ? (
           <div className="text-center">
             <p className="text-xs text-gray-500">
-              © 2025 ARS 관리 시스템
+              © 2025 한화손해보험
             </p>
             <p className="text-xs text-gray-400 mt-1">
               v2.1.0

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -20,8 +21,7 @@ import {
   Settings,
   LogOut,
   Menu,
-  X,
-  Shield
+  X
 } from "lucide-react"
 import { useAppSelector, useAppDispatch } from "../../app/store/hooks"
 import { logout } from "../../app/store/authSlice"
@@ -101,14 +101,20 @@ export default function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
 
           {/* 로고 */}
           <Link href="/" className="flex items-center space-x-2">
-            <div className="flex items-center justify-center w-8 h-8 bg-primary rounded">
-              <Shield className="h-5 w-5 text-white" />
+            <div className="flex items-center justify-center w-10 h-10">
+              <Image 
+                src="/hanwha-logo.svg" 
+                alt="한화손해보험 로고" 
+                width={40} 
+                height={40}
+                className="w-10 h-10"
+              />
             </div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-bold text-gray-900">
-                ARS 시나리오 관리
+                한화손해보험 ARS 관리
               </h1>
-              <p className="text-xs text-gray-500">손해보험 콜센터</p>
+              <p className="text-xs text-gray-500">콜센터 시나리오 관리 시스템</p>
             </div>
           </Link>
         </div>
