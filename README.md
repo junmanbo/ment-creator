@@ -24,7 +24,7 @@
 - **Database**: PostgreSQL 15+
 - **ORM**: SQLModel + SQLAlchemy
 - **Authentication**: JWT + OAuth2
-- **TTS Engine**: Fish Speech (S1 Model) + Voice Cloning
+- **TTS Engine**: Voice Cloning
 - **Background Tasks**: FastAPI BackgroundTasks
 
 ### Frontend
@@ -126,42 +126,7 @@ npm install
 cp .env.example .env.local  # 필요시
 \`\`\`
 
-### 6. Fish Speech TTS 서비스 설정
-
-#### 🐟 Fish Speech Docker 실행
-
-**GPU 환경 (NVIDIA GPU 있는 경우)**
-\`\`\`bash
-# GPU 비전 Fish Speech 시작
-chmod +x fish-speech-docker.sh
-./fish-speech-docker.sh start-gpu
-
-# 상태 확인
-./fish-speech-docker.sh status
-\`\`\`
-
-**CPU 환경 (GPU 없는 경우)**
-\`\`\`bash
-# CPU 뺄전 Fish Speech 시작
-./fish-speech-docker.sh start-cpu
-
-# 상태 확인
-./fish-speech-docker.sh status
-\`\`\`
-
-**서비스 관리**
-\`\`\`bash
-# 로그 확인
-./fish-speech-docker.sh logs
-
-# 서비스 중지
-./fish-speech-docker.sh stop
-
-# 재시작
-./fish-speech-docker.sh restart-gpu  # 또는 restart-cpu
-\`\`\`
-
-### 7. 애플리케이션 실행
+### 6. 애플리케이션 실행
 
 #### 🚀 원클릭 실행 (권장)
 \`\`\`bash
@@ -178,13 +143,12 @@ chmod +x start_app.sh
 ./start_frontend.sh
 \`\`\`
 
-### 8. 애플리케이션 접속
+### 7. 애플리케이션 접속
 
 - **프론트엔드**: http://localhost:3000
 - **백엔드 API**: http://localhost:8000
 - **API 문서**: http://localhost:8000/docs
 - **Redoc**: http://localhost:8000/redoc
-- **Fish Speech API**: http://localhost:8765 (헬스체크: http://localhost:8765/health)
 
 ## 👨‍💻 개발 가이드
 
@@ -260,16 +224,6 @@ npm run lint:fix
 
 ## 🔧 고급 설정
 
-### Fish Speech TTS 모델 설정
-
-\`\`\`bash
-# .env 파일에서 설정
-FISH_SPEECH_API_URL=http://fish-speech:8765
-FISH_SPEECH_MODEL=S1  # S1 모델 사용 (고품질)
-FISH_SPEECH_DEVICE=cuda:0  # GPU 사용 또는 cpu
-TTS_GPU_ENABLED=true
-\`\`\`
-
 ### 파일 업로드 제한
 
 \`\`\`bash
@@ -279,23 +233,11 @@ ALLOWED_AUDIO_FORMATS=wav,mp3,ogg,flac,m4a
 
 ### GPU 사용 설정
 
-NVIDIA GPU가 있는 경우 Fish Speech TTS 생성 속도가 크게 향상됩니다:
+NVIDIA GPU가 있는 경우 TTS 생성 속도가 크게 향상됩니다:
 
 \`\`\`bash
 # CUDA 설치 확인
 nvidia-smi
-
-# Fish Speech GPU 버전 Docker 실행
-./fish-speech-docker.sh start-gpu
-
-# GPU 사용 확인
-./fish-speech-docker.sh logs | grep -i cuda
-\`\`\`
-
-**CPU 전용 환경**
-\`\`\`bash
-# CPU 버전 Fish Speech 실행
-./fish-speech-docker.sh start-cpu
 \`\`\`
 
 ## 📊 모니터링
@@ -387,11 +329,10 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
    - PostgreSQL 서비스 실행 상태 확인
    - 데이터베이스 연결 정보 확인
 
-2. **Fish Speech TTS 생성 실패**
-   - Docker 컨테이너 상태 확인: `./fish-speech-docker.sh status`
-   - API 서버 연결 실패: `curl http://localhost:8765/health`
-   - GPU 메모리 부족: CPU 버전 사용 또는 배치 크기 축소
-   - 모델 다운로드 실패: 인터넷 연결 확인 및 `./fish-speech-docker.sh build`
+2. **TTS 생성 실패**
+   - API 서버 연결 확인
+   - GPU 메모리 부족: 배치 크기 축소
+   - 모델 상태 확인
 
 3. **프론트엔드 빌드 오류**
    - Node.js 버전 확인 (18+ 필요)
