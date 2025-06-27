@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel, Relationship, Column
 from sqlalchemy import JSON
 from enum import Enum
 
+
 class GenerationStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -13,17 +14,23 @@ class GenerationStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+
 # TTS 스크립트 (멘트 내용 + 설정)
 class TTSScriptBase(SQLModel):
     text_content: str
-    voice_settings: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 속도, 톤, 감정 설정
+    voice_settings: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON)
+    )  # 속도, 톤, 감정 설정
+
 
 class TTSScriptCreate(TTSScriptBase):
     voice_actor_id: Optional[uuid.UUID] = None
 
+
 class TTSScriptUpdate(TTSScriptBase):
     text_content: Optional[str] = None
     voice_actor_id: Optional[uuid.UUID] = None
+
 
 class TTSScript(TTSScriptBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -31,7 +38,7 @@ class TTSScript(TTSScriptBase, table=True):
     created_by: uuid.UUID = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    
+
     # 관계 정의
     voice_actor: Optional["VoiceActor"] = Relationship()
     created_by_user: Optional["User"] = Relationship(
@@ -39,19 +46,31 @@ class TTSScript(TTSScriptBase, table=True):
     )
     generations: List["TTSGeneration"] = Relationship(back_populates="script")
 
+
 class TTSScriptPublic(TTSScriptBase):
     id: uuid.UUID
     voice_actor_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
 
+
 # TTS 생성 작업
 class TTSGenerationBase(SQLModel):
-    generation_params: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 생성 파라미터
+    generation_params: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON)
+    )  # 생성 파라미터
+
 
 class TTSGenerateRequest(SQLModel):
     script_id: uuid.UUID
     generation_params: Optional[Dict[str, Any]] = None
+
+
+class TTSMultipleGenerateRequest(SQLModel):
+    script_id: uuid.UUID
+    presets: Optional[List[str]] = None  # 사용할 프리셋 목록 (없으면 기본 3종)
+    generation_params: Optional[Dict[str, Any]] = None
+
 
 class TTSGeneration(TTSGenerationBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -66,12 +85,13 @@ class TTSGeneration(TTSGenerationBase, table=True):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
-    
+
     # 관계 정의
     script: Optional[TTSScript] = Relationship(back_populates="generations")
     requested_by_user: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[TTSGeneration.requested_by]"}
     )
+
 
 class TTSGenerationPublic(TTSGenerationBase):
     id: uuid.UUID
@@ -86,6 +106,7 @@ class TTSGenerationPublic(TTSGenerationBase):
     completed_at: Optional[datetime] = None
     created_at: datetime
 
+
 # TTS 라이브러리 (재사용 가능한 멘트)
 class TTSLibraryBase(SQLModel):
     name: str = Field(max_length=200)
@@ -94,8 +115,10 @@ class TTSLibraryBase(SQLModel):
     tags: Optional[str] = Field(default=None, max_length=500)  # 쉼표로 구분된 태그
     is_public: bool = Field(default=False)
 
+
 class TTSLibraryCreate(TTSLibraryBase):
     voice_actor_id: Optional[uuid.UUID] = None
+
 
 class TTSLibraryUpdate(TTSLibraryBase):
     name: Optional[str] = None
@@ -103,6 +126,7 @@ class TTSLibraryUpdate(TTSLibraryBase):
     category: Optional[str] = None
     tags: Optional[str] = None
     is_public: Optional[bool] = None
+
 
 class TTSLibrary(TTSLibraryBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -112,12 +136,13 @@ class TTSLibrary(TTSLibraryBase, table=True):
     created_by: uuid.UUID = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    
+
     # 관계 정의
     voice_actor: Optional["VoiceActor"] = Relationship()
     created_by_user: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[TTSLibrary.created_by]"}
     )
+
 
 class TTSLibraryPublic(TTSLibraryBase):
     id: uuid.UUID
@@ -127,11 +152,14 @@ class TTSLibraryPublic(TTSLibraryBase):
     created_at: datetime
     updated_at: datetime
 
+
 # 기존 Ment 모델 확장 (TTS 연동을 위해)
 class MentUpdate(SQLModel):
     title: Optional[str] = None
     sub_title: Optional[str] = None
     content: Optional[str] = None
     voice_actor_id: Optional[uuid.UUID] = None  # 추가
-    voice_settings: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # 추가
+    voice_settings: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON)
+    )  # 추가
     modified_dt: datetime = Field(default_factory=datetime.now)

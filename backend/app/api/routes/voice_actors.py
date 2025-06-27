@@ -7,21 +7,45 @@ from sqlmodel import SQLModel
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Query
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Depends,
+    UploadFile,
+    File,
+    Form,
+    BackgroundTasks,
+    Query,
+)
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models.voice_actor import (
-    VoiceActor, VoiceActorCreate, VoiceActorUpdate, VoiceActorPublic,
-    VoiceSample, VoiceSampleCreate, VoiceSamplePublic,
-    GenderType, AgeRangeType
+    VoiceActor,
+    VoiceActorCreate,
+    VoiceActorUpdate,
+    VoiceActorPublic,
+    VoiceSample,
+    VoiceSampleCreate,
+    VoiceSamplePublic,
+    GenderType,
+    AgeRangeType,
 )
 from app.models.tts import (
-    TTSScript, TTSScriptCreate, TTSScriptUpdate, TTSScriptPublic, 
-    TTSGeneration, TTSGenerateRequest, TTSGenerationPublic,
-    TTSLibrary, TTSLibraryCreate, TTSLibraryUpdate, TTSLibraryPublic,
-    GenerationStatus
+    TTSScript,
+    TTSScriptCreate,
+    TTSScriptUpdate,
+    TTSScriptPublic,
+    TTSGeneration,
+    TTSGenerateRequest,
+    TTSMultipleGenerateRequest,
+    TTSGenerationPublic,
+    TTSLibrary,
+    TTSLibraryCreate,
+    TTSLibraryUpdate,
+    TTSLibraryPublic,
+    GenerationStatus,
 )
 
 # 🔄 TTS 서비스를 팩토리 패턴으로 교체
@@ -30,31 +54,39 @@ from app.services.tts_factory import get_tts_service
 # 🎤 오디오 전처리 서비스 추가
 from app.services.audio.audio_preprocessor import audio_preprocessor
 
+
 # TTS Generation with Script info
 class TTSGenerationWithScript(TTSGenerationPublic):
     script: Optional[TTSScriptPublic] = None
     voice_actor_name: Optional[str] = None
+
 
 # TTS Script with Voice Actor info
 class TTSScriptWithVoiceActor(TTSScriptPublic):
     voice_actor_name: Optional[str] = None
     latest_generation: Optional[TTSGenerationPublic] = None
 
+
 router = APIRouter(prefix="/voice-actors", tags=["voice-actors"])
 
 # === 테스트 및 고정 경로 (path parameter보다 먼저 정의) ===
 
+
 @router.get("/test")
 def test_voice_actors_api():
     """API 테스트 엔드포인트"""
-    return {"message": "Voice actors API is working", "timestamp": datetime.now().isoformat()}
+    return {
+        "message": "Voice actors API is working",
+        "timestamp": datetime.now().isoformat(),
+    }
+
 
 @router.get("/api-test")
 def test_voice_actors_api_2():
     """성우 API 기본 연결 테스트"""
     logger.info("🧪 Voice actors API test endpoint called")
     return {
-        "message": "Voice actors API is working perfectly!", 
+        "message": "Voice actors API is working perfectly!",
         "timestamp": datetime.now().isoformat(),
         "status": "healthy",
         "endpoints": {
@@ -63,28 +95,25 @@ def test_voice_actors_api_2():
             "tts_generations": "/voice-actors/tts-generations",
             "tts_library": "/voice-actors/tts-library",
             "debug_diagnosis": "/voice-actors/debug/diagnosis",
-            "debug_fix": "/voice-actors/debug/fix-issues"
-        }
+            "debug_fix": "/voice-actors/debug/fix-issues",
+        },
     }
 
+
 @router.get("/db-status")
-def check_database_status(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser
-):
+def check_database_status(*, session: SessionDep, current_user: CurrentUser):
     """데이터베이스 상태 확인"""
     logger.info(f"🔍 Database status check requested by user {current_user.id}")
-    
+
     try:
         # 각 테이블의 레코드 수 확인
         from app.models.users import User
-        
+
         users_count = len(session.exec(select(User)).all())
         voice_actors_count = len(session.exec(select(VoiceActor)).all())
         tts_scripts_count = len(session.exec(select(TTSScript)).all())
         tts_generations_count = len(session.exec(select(TTSGeneration)).all())
-        
+
         # 현재 사용자의 TTS 스크립트 조회
         user_scripts = session.exec(
             select(TTSScript)
@@ -92,28 +121,36 @@ def check_database_status(
             .order_by(TTSScript.created_at.desc())
             .limit(5)
         ).all()
-        
+
         user_scripts_data = []
         for script in user_scripts:
-            user_scripts_data.append({
-                "id": str(script.id),
-                "text_content": script.text_content[:100] + "..." if len(script.text_content) > 100 else script.text_content,
-                "created_at": script.created_at.isoformat(),
-                "voice_actor_id": str(script.voice_actor_id) if script.voice_actor_id else None
-            })
-        
+            user_scripts_data.append(
+                {
+                    "id": str(script.id),
+                    "text_content": script.text_content[:100] + "..."
+                    if len(script.text_content) > 100
+                    else script.text_content,
+                    "created_at": script.created_at.isoformat(),
+                    "voice_actor_id": str(script.voice_actor_id)
+                    if script.voice_actor_id
+                    else None,
+                }
+            )
+
         # 성우 목록 조회
         voice_actors = session.exec(select(VoiceActor).limit(10)).all()
         voice_actors_data = []
         for actor in voice_actors:
-            voice_actors_data.append({
-                "id": str(actor.id),
-                "name": actor.name,
-                "gender": actor.gender,
-                "age_range": actor.age_range,
-                "is_active": actor.is_active
-            })
-        
+            voice_actors_data.append(
+                {
+                    "id": str(actor.id),
+                    "name": actor.name,
+                    "gender": actor.gender,
+                    "age_range": actor.age_range,
+                    "is_active": actor.is_active,
+                }
+            )
+
         return {
             "status": "success",
             "timestamp": datetime.now().isoformat(),
@@ -121,38 +158,35 @@ def check_database_status(
                 "users": users_count,
                 "voice_actors": voice_actors_count,
                 "tts_scripts": tts_scripts_count,
-                "tts_generations": tts_generations_count
+                "tts_generations": tts_generations_count,
             },
             "current_user": {
                 "id": str(current_user.id),
                 "email": current_user.email,
-                "scripts_count": len(user_scripts)
+                "scripts_count": len(user_scripts),
             },
             "user_scripts": user_scripts_data,
-            "voice_actors": voice_actors_data
+            "voice_actors": voice_actors_data,
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Database status check failed: {e}")
         return {
             "status": "error",
             "timestamp": datetime.now().isoformat(),
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": type(e).__name__,
         }
 
+
 @router.post("/create-sample-data")
-def create_sample_data(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser
-):
+def create_sample_data(*, session: SessionDep, current_user: CurrentUser):
     """샘플 데이터 생성"""
     logger.info(f"🛠️ Sample data creation requested by user {current_user.id}")
-    
+
     try:
         created_items = []
-        
+
         # 샘플 성우 생성
         sample_actor_data = {
             "name": "김서연",
@@ -160,17 +194,22 @@ def create_sample_data(
             "age_range": "30s",
             "language": "ko",
             "description": "친근하고 따뜻한 목소리의 전문 성우",
-            "characteristics": {"tone": "친근함", "style": "밝음", "specialty": "보험업계"},
+            "characteristics": {
+                "tone": "친근함",
+                "style": "밝음",
+                "specialty": "보험업계",
+            },
             "is_active": True,
-            "created_by": current_user.id
+            "created_by": current_user.id,
         }
-        
+
         existing_actor = session.exec(
             select(VoiceActor).where(VoiceActor.name == sample_actor_data["name"])
         ).first()
-        
+
         if not existing_actor:
             from app.models.voice_actor import GenderType, AgeRangeType
+
             sample_actor = VoiceActor(
                 name=sample_actor_data["name"],
                 gender=GenderType.FEMALE,
@@ -179,7 +218,7 @@ def create_sample_data(
                 description=sample_actor_data["description"],
                 characteristics=sample_actor_data["characteristics"],
                 is_active=sample_actor_data["is_active"],
-                created_by=current_user.id
+                created_by=current_user.id,
             )
             session.add(sample_actor)
             session.commit()
@@ -188,60 +227,62 @@ def create_sample_data(
         else:
             sample_actor = existing_actor
             created_items.append(f"기존 성우 사용: {sample_actor.name}")
-        
+
         # 샘플 TTS 스크립트들 생성
         sample_scripts = [
             {
                 "text_content": "안녕하세요. OO손해보험 고객센터입니다. 무엇을 도와드릴까요?",
-                "voice_settings": {"speed": 1.0, "tone": "friendly", "emotion": "bright"}
+                "voice_settings": {
+                    "speed": 1.0,
+                    "tone": "friendly",
+                    "emotion": "bright",
+                },
             },
             {
                 "text_content": "메뉴를 선택해 주세요. 1번 자동차보험, 2번 화재보험, 9번 상담원 연결입니다.",
-                "voice_settings": {"speed": 0.9, "tone": "clear", "emotion": "neutral"}
+                "voice_settings": {"speed": 0.9, "tone": "clear", "emotion": "neutral"},
             },
             {
                 "text_content": "상담원에게 연결해 드리겠습니다. 잠시만 기다려 주세요.",
-                "voice_settings": {"speed": 1.0, "tone": "polite", "emotion": "calm"}
+                "voice_settings": {"speed": 1.0, "tone": "polite", "emotion": "calm"},
             },
             {
                 "text_content": "감사합니다. 좋은 하루 되세요.",
-                "voice_settings": {"speed": 1.0, "tone": "warm", "emotion": "bright"}
-            }
+                "voice_settings": {"speed": 1.0, "tone": "warm", "emotion": "bright"},
+            },
         ]
-        
+
         scripts_created = 0
         for script_data in sample_scripts:
             existing_script = session.exec(
-                select(TTSScript).where(
-                    TTSScript.text_content == script_data["text_content"]
-                ).where(
-                    TTSScript.created_by == current_user.id
-                )
+                select(TTSScript)
+                .where(TTSScript.text_content == script_data["text_content"])
+                .where(TTSScript.created_by == current_user.id)
             ).first()
-            
+
             if not existing_script:
                 new_script = TTSScript(
                     text_content=script_data["text_content"],
                     voice_actor_id=sample_actor.id,
                     voice_settings=script_data["voice_settings"],
-                    created_by=current_user.id
+                    created_by=current_user.id,
                 )
                 session.add(new_script)
                 scripts_created += 1
-        
+
         if scripts_created > 0:
             session.commit()
             created_items.append(f"TTS 스크립트 {scripts_created}개")
         else:
             created_items.append("TTS 스크립트 (이미 존재함)")
-        
+
         return {
             "status": "success",
             "message": "샘플 데이터 생성 완료",
             "timestamp": datetime.now().isoformat(),
-            "created_items": created_items
+            "created_items": created_items,
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Sample data creation failed: {e}")
         return {
@@ -249,17 +290,16 @@ def create_sample_data(
             "message": "샘플 데이터 생성 실패",
             "timestamp": datetime.now().isoformat(),
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": type(e).__name__,
         }
+
 
 # === TTS 스크립트 관리 (고정 경로) ===
 
+
 @router.post("/tts-scripts", response_model=TTSScriptPublic)
 def create_tts_script(
-    *,
-    session: SessionDep,
-    script_in: TTSScriptCreate,
-    current_user: CurrentUser
+    *, session: SessionDep, script_in: TTSScriptCreate, current_user: CurrentUser
 ) -> TTSScriptPublic:
     """TTS 스크립트 생성"""
     # 성우 존재 확인
@@ -267,20 +307,20 @@ def create_tts_script(
         voice_actor = session.get(VoiceActor, script_in.voice_actor_id)
         if not voice_actor:
             raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
-    script = TTSScript(
-        **script_in.model_dump(),
-        created_by=current_user.id
-    )
+
+    script = TTSScript(**script_in.model_dump(), created_by=current_user.id)
     session.add(script)
     session.commit()
     session.refresh(script)
-    
+
     try:
         return TTSScriptPublic.model_validate(script)
     except Exception as e:
         logger.error(f"❌ Failed to convert TTS script {script.id}: {e}")
-        raise HTTPException(status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다."
+        )
+
 
 @router.get("/tts-scripts", response_model=List[TTSScriptWithVoiceActor])
 def get_tts_scripts(
@@ -292,30 +332,29 @@ def get_tts_scripts(
     voice_actor_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
     sort_by: str = "created_at",
-    sort_order: str = "desc"
+    sort_order: str = "desc",
 ) -> List[TTSScriptWithVoiceActor]:
     """TTS 스크립트 목록 조회 (성우 정보 및 최신 생성 결과 포함)"""
-    logger.info(f"🎯 GET /tts-scripts called with filters: voice_actor_id={voice_actor_id}, search={search}")
-    
+    logger.info(
+        f"🎯 GET /tts-scripts called with filters: voice_actor_id={voice_actor_id}, search={search}"
+    )
+
     try:
         # 스크립트와 성우 정보를 함께 조회
         statement = (
-            select(
-                TTSScript,
-                VoiceActor.name.label("voice_actor_name")
-            )
+            select(TTSScript, VoiceActor.name.label("voice_actor_name"))
             .outerjoin(VoiceActor, TTSScript.voice_actor_id == VoiceActor.id)
             .where(TTSScript.created_by == current_user.id)
         )
-        
+
         # 필터 적용
         if voice_actor_id:
             statement = statement.where(TTSScript.voice_actor_id == voice_actor_id)
-        
+
         if search:
             search_term = f"%{search}%"
             statement = statement.where(TTSScript.text_content.ilike(search_term))
-        
+
         # 정렬
         if sort_by == "created_at":
             order_column = TTSScript.created_at
@@ -325,22 +364,22 @@ def get_tts_scripts(
             order_column = TTSScript.text_content
         else:
             order_column = TTSScript.created_at
-        
+
         if sort_order == "desc":
             order_column = order_column.desc()
         else:
             order_column = order_column.asc()
-        
+
         statement = statement.order_by(order_column).offset(skip).limit(limit)
-        
+
         results = session.exec(statement).all()
-        
+
         # 각 스크립트에 대해 최신 생성 결과 조회
         scripts_with_info = []
         for script, voice_actor_name in results:
             script_dict = script.model_dump()
             script_dict["voice_actor_name"] = voice_actor_name
-            
+
             # 최신 생성 결과 조회
             latest_generation_stmt = (
                 select(TTSGeneration)
@@ -349,43 +388,43 @@ def get_tts_scripts(
                 .limit(1)
             )
             latest_generation = session.exec(latest_generation_stmt).first()
-            
+
             if latest_generation:
                 script_dict["latest_generation"] = latest_generation.model_dump()
             else:
                 script_dict["latest_generation"] = None
-            
+
             scripts_with_info.append(TTSScriptWithVoiceActor(**script_dict))
-        
+
         logger.info(f"✅ Successfully retrieved {len(scripts_with_info)} TTS scripts")
         return scripts_with_info
-        
+
     except Exception as e:
         logger.error(f"💥 ERROR in get_tts_scripts: {e}")
-        raise HTTPException(status_code=500, detail=f"TTS 스크립트 목록 조회 중 오류: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"TTS 스크립트 목록 조회 중 오류: {str(e)}"
+        )
+
 
 @router.get("/tts-scripts/{script_id}", response_model=TTSScriptWithVoiceActor)
 def get_tts_script(
-    *,
-    session: SessionDep,
-    script_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, script_id: uuid.UUID, current_user: CurrentUser
 ) -> TTSScriptWithVoiceActor:
     """특정 TTS 스크립트 조회"""
     script = session.get(TTSScript, script_id)
     if not script:
         raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
-    
+
     if script.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     # 성우 정보 조회
     voice_actor_name = None
     if script.voice_actor_id:
         voice_actor = session.get(VoiceActor, script.voice_actor_id)
         if voice_actor:
             voice_actor_name = voice_actor.name
-    
+
     # 최신 생성 결과 조회
     latest_generation_stmt = (
         select(TTSGeneration)
@@ -394,12 +433,15 @@ def get_tts_script(
         .limit(1)
     )
     latest_generation = session.exec(latest_generation_stmt).first()
-    
+
     script_dict = script.model_dump()
     script_dict["voice_actor_name"] = voice_actor_name
-    script_dict["latest_generation"] = latest_generation.model_dump() if latest_generation else None
-    
+    script_dict["latest_generation"] = (
+        latest_generation.model_dump() if latest_generation else None
+    )
+
     return TTSScriptWithVoiceActor(**script_dict)
+
 
 @router.put("/tts-scripts/{script_id}", response_model=TTSScriptPublic)
 def update_tts_script(
@@ -407,56 +449,56 @@ def update_tts_script(
     session: SessionDep,
     script_id: uuid.UUID,
     script_in: TTSScriptUpdate,
-    current_user: CurrentUser
+    current_user: CurrentUser,
 ) -> TTSScriptPublic:
     """TTS 스크립트 수정"""
     script = session.get(TTSScript, script_id)
     if not script:
         raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
-    
+
     if script.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
-    
+
     # 성우 존재 확인
     if script_in.voice_actor_id:
         voice_actor = session.get(VoiceActor, script_in.voice_actor_id)
         if not voice_actor:
             raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
+
     update_data = script_in.model_dump(exclude_unset=True)
     update_data["updated_at"] = datetime.now()
     script.sqlmodel_update(update_data)
-    
+
     session.add(script)
     session.commit()
     session.refresh(script)
-    
+
     try:
         return TTSScriptPublic.model_validate(script)
     except Exception as e:
         logger.error(f"❌ Failed to convert updated TTS script {script_id}: {e}")
-        raise HTTPException(status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="TTS 스크립트 데이터 변환 중 오류가 발생했습니다."
+        )
+
 
 @router.delete("/tts-scripts/{script_id}")
 def delete_tts_script(
-    *,
-    session: SessionDep,
-    script_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, script_id: uuid.UUID, current_user: CurrentUser
 ):
     """TTS 스크립트 삭제"""
     script = session.get(TTSScript, script_id)
     if not script:
         raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
-    
+
     if script.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
-    
+
     # 관련된 생성 작업들도 함께 삭제
     generations = session.exec(
         select(TTSGeneration).where(TTSGeneration.script_id == script_id)
     ).all()
-    
+
     for generation in generations:
         # 오디오 파일 삭제
         if generation.audio_file_path:
@@ -465,14 +507,17 @@ def delete_tts_script(
                 if file_path.exists():
                     file_path.unlink()
             except Exception as e:
-                logger.warning(f"Failed to delete audio file {generation.audio_file_path}: {e}")
-        
+                logger.warning(
+                    f"Failed to delete audio file {generation.audio_file_path}: {e}"
+                )
+
         session.delete(generation)
-    
+
     session.delete(script)
     session.commit()
-    
+
     return {"message": "TTS 스크립트가 삭제되었습니다."}
+
 
 @router.post("/tts-scripts/{script_id}/generate", response_model=TTSGenerationPublic)
 async def generate_tts(
@@ -481,144 +526,237 @@ async def generate_tts(
     script_id: uuid.UUID,
     generate_request: TTSGenerateRequest,
     current_user: CurrentUser,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
 ) -> TTSGenerationPublic:
     """TTS 생성 요청 (팩토리 패턴 사용)"""
     # 스크립트 확인
     script = session.get(TTSScript, script_id)
     if not script:
         raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
-    
+
     # 한국어 최적화 기본 파라미터 병합
     korean_optimized_params = {
         "temperature": 0.65,
         "top_k": 40,
         "top_p": 0.85,
         "repetition_penalty": 1.1,
-        "do_sample": True
+        "do_sample": True,
     }
-    
+
     # 사용자 지정 파라미터와 병합
     if generate_request.generation_params:
         korean_optimized_params.update(generate_request.generation_params)
-    
+
     logger.info(f"🌏 한국어 최적화 TTS 파라미터: {korean_optimized_params}")
-    
+
     # 생성 작업 생성
     generation = TTSGeneration(
         script_id=script_id,
         generation_params=korean_optimized_params,
-        requested_by=current_user.id
+        requested_by=current_user.id,
     )
-    
+
     session.add(generation)
     session.commit()
     session.refresh(generation)
-    
+
     # 🔄 팩토리에서 현재 TTS 서비스 가져오기
     tts_service = get_tts_service()
-    
-    # 백그라운드에서 TTS 생성 처리
-    background_tasks.add_task(
-        tts_service.process_tts_generation,
-        generation.id
-    )
-    
+
+    # 백그라운드에서 TTS 생성 처리 (에러 로깅 래퍼 포함)
+    async def tts_generation_wrapper():
+        try:
+            await tts_service.process_tts_generation(generation.id)
+        except Exception as e:
+            logger.error(f"🚨 백그라운드 TTS 작업 래퍼에서 예외 발생: {e}")
+            logger.error(f"🚨 예외 타입: {type(e).__name__}")
+            import traceback
+
+            logger.error(f"🚨 스택 트레이스: {traceback.format_exc()}")
+
+    background_tasks.add_task(tts_generation_wrapper)
+
     try:
         return TTSGenerationPublic.model_validate(generation)
     except Exception as e:
         logger.error(f"❌ Failed to convert TTS generation {generation.id}: {e}")
-        raise HTTPException(status_code=500, detail="TTS 생성 데이터 변환 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="TTS 생성 데이터 변환 중 오류가 발생했습니다."
+        )
+
+
+@router.post(
+    "/tts-scripts/{script_id}/generate-multiple", response_model=TTSGenerationPublic
+)
+async def generate_multiple_tts_versions(
+    *,
+    session: SessionDep,
+    script_id: uuid.UUID,
+    generate_request: TTSMultipleGenerateRequest,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> TTSGenerationPublic:
+    """다중 버전 TTS 생성 요청 (여러 파라미터 조합으로 음성 파일 생성)"""
+    # 스크립트 확인
+    script = session.get(TTSScript, script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
+
+    # 프리셋 검증
+    from app.services.tts_service import KOREAN_TTS_PRESETS
+
+    if generate_request.presets:
+        invalid_presets = [
+            p for p in generate_request.presets if p not in KOREAN_TTS_PRESETS
+        ]
+        if invalid_presets:
+            available_presets = list(KOREAN_TTS_PRESETS.keys())
+            raise HTTPException(
+                status_code=400,
+                detail=f"잘못된 프리셋: {invalid_presets}. 사용 가능한 프리셋: {available_presets}",
+            )
+        presets = generate_request.presets
+    else:
+        # 기본 프리셋: 가장 많이 사용되는 3종
+        presets = ["natural", "professional", "warm"]
+
+    logger.info(f"🎭 다중 버전 TTS 생성 요청 - 스크립트 ID: {script_id}")
+    logger.info(f"📝 텍스트: '{script.text_content[:50]}...'")
+    logger.info(f"🎯 선택된 프리셋: {presets}")
+
+    # 다중 버전 생성 작업 생성
+    generation = TTSGeneration(
+        script_id=script_id,
+        generation_params={
+            "multiple_versions": True,
+            "requested_presets": presets,
+            "quality": "high",
+            **(generate_request.generation_params or {}),
+        },
+        requested_by=current_user.id,
+    )
+
+    session.add(generation)
+    session.commit()
+    session.refresh(generation)
+
+    # 🔄 팩토리에서 현재 TTS 서비스 가져오기
+    tts_service = get_tts_service()
+
+    # 백그라운드에서 다중 버전 TTS 생성 처리
+    async def multiple_tts_generation_wrapper():
+        try:
+            await tts_service.process_multiple_tts_generation(generation.id, presets)
+        except Exception as e:
+            logger.error(f"🚨 다중 버전 백그라운드 TTS 작업 래퍼에서 예외 발생: {e}")
+            logger.error(f"🚨 예외 타입: {type(e).__name__}")
+            import traceback
+
+            logger.error(f"🚨 스택 트레이스: {traceback.format_exc()}")
+
+    background_tasks.add_task(multiple_tts_generation_wrapper)
+
+    try:
+        return TTSGenerationPublic.model_validate(generation)
+    except Exception as e:
+        logger.error(
+            f"❌ Failed to convert multiple TTS generation {generation.id}: {e}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="다중 버전 TTS 생성 데이터 변환 중 오류가 발생했습니다.",
+        )
+
 
 @router.post("/tts-scripts/batch-generate")
 async def batch_generate_tts(
     *,
     session: SessionDep,
-    batch_request: 'BatchTTSRequest',
+    batch_request: "BatchTTSRequest",
     current_user: CurrentUser,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
 ):
     """여러 TTS 스크립트를 한 번에 생성 (팩토리 패턴 사용)"""
     if not batch_request.script_ids:
         raise HTTPException(status_code=400, detail="스크립트 ID가 없습니다.")
-    
+
     if len(batch_request.script_ids) > 20:  # 최대 20개로 제한
-        raise HTTPException(status_code=400, detail="한 번에 최대 20개의 스크립트만 처리할 수 있습니다.")
-    
+        raise HTTPException(
+            status_code=400, detail="한 번에 최대 20개의 스크립트만 처리할 수 있습니다."
+        )
+
     # 스크립트 소유권 확인
     for script_id in batch_request.script_ids:
         script = session.get(TTSScript, script_id)
         if not script:
-            raise HTTPException(status_code=404, detail=f"스크립트 {script_id}를 찾을 수 없습니다.")
+            raise HTTPException(
+                status_code=404, detail=f"스크립트 {script_id}를 찾을 수 없습니다."
+            )
         if script.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail=f"스크립트 {script_id}에 대한 권한이 없습니다.")
-    
+            raise HTTPException(
+                status_code=403, detail=f"스크립트 {script_id}에 대한 권한이 없습니다."
+            )
+
     # 🔄 팩토리에서 현재 TTS 서비스 가져오기
     tts_service = get_tts_service()
-    
+
     # 배치 생성 시작
     try:
         results = await tts_service.batch_generate_tts(
-            batch_request.script_ids,
-            batch_request.force_regenerate
+            batch_request.script_ids, batch_request.force_regenerate
         )
-        
-        return {
-            "message": "배치 TTS 생성이 시작되었습니다.",
-            "results": results
-        }
-        
+
+        return {"message": "배치 TTS 생성이 시작되었습니다.", "results": results}
+
     except Exception as e:
         logger.error(f"Batch TTS generation failed: {e}")
         raise HTTPException(status_code=500, detail="배치 생성 중 오류가 발생했습니다.")
 
+
 # === TTS 생성 관리 ===
+
 
 @router.get("/tts-generations/{generation_id}", response_model=TTSGenerationPublic)
 def get_tts_generation(
-    *,
-    session: SessionDep,
-    generation_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, generation_id: uuid.UUID, current_user: CurrentUser
 ) -> TTSGeneration:
     """TTS 생성 상태 조회"""
     generation = session.get(TTSGeneration, generation_id)
     if not generation:
         raise HTTPException(status_code=404, detail="생성 작업을 찾을 수 없습니다.")
-    
+
     if generation.requested_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     return generation
+
 
 @router.get("/tts-generations/{generation_id}/audio")
 def stream_generated_audio(
-    *,
-    session: SessionDep,
-    generation_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, generation_id: uuid.UUID, current_user: CurrentUser
 ) -> StreamingResponse:
     """생성된 TTS 오디오 스트리밍"""
     generation = session.get(TTSGeneration, generation_id)
     if not generation:
         raise HTTPException(status_code=404, detail="생성 작업을 찾을 수 없습니다.")
-    
+
     if generation.requested_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     if not generation.audio_file_path:
         raise HTTPException(status_code=404, detail="생성된 오디오 파일이 없습니다.")
-    
+
     file_path = Path(generation.audio_file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="오디오 파일을 찾을 수 없습니다.")
-    
+
     def iterfile():
         with open(file_path, "rb") as file:
             while chunk := file.read(1024):
                 yield chunk
-    
+
     return StreamingResponse(iterfile(), media_type="audio/wav")
+
 
 @router.get("/tts-generations", response_model=List[TTSGenerationWithScript])
 def get_tts_generations(
@@ -631,32 +769,28 @@ def get_tts_generations(
     voice_actor_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
     sort_by: str = "created_at",
-    sort_order: str = "desc"
+    sort_order: str = "desc",
 ) -> List[TTSGenerationWithScript]:
     """TTS 생성 목록 조회 (스크립트 정보 포함)"""
     # 스크립트와 성우 정보를 함께 조회
     statement = (
-        select(
-            TTSGeneration,
-            TTSScript,
-            VoiceActor.name.label("voice_actor_name")
-        )
+        select(TTSGeneration, TTSScript, VoiceActor.name.label("voice_actor_name"))
         .join(TTSScript, TTSGeneration.script_id == TTSScript.id)
         .outerjoin(VoiceActor, TTSScript.voice_actor_id == VoiceActor.id)
         .where(TTSGeneration.requested_by == current_user.id)
     )
-    
+
     # 필터 적용
     if status:
         statement = statement.where(TTSGeneration.status == status)
-    
+
     if voice_actor_id:
         statement = statement.where(TTSScript.voice_actor_id == voice_actor_id)
-    
+
     if search:
         search_term = f"%{search}%"
         statement = statement.where(TTSScript.text_content.ilike(search_term))
-    
+
     # 정렬
     if sort_by == "created_at":
         order_column = TTSGeneration.created_at
@@ -666,16 +800,16 @@ def get_tts_generations(
         order_column = TTSGeneration.duration
     else:
         order_column = TTSGeneration.created_at
-    
+
     if sort_order == "desc":
         order_column = order_column.desc()
     else:
         order_column = order_column.asc()
-    
+
     statement = statement.order_by(order_column).offset(skip).limit(limit)
-    
+
     results = session.exec(statement).all()
-    
+
     # 결과를 TTSGenerationWithScript 형태로 변환
     generations = []
     for generation, script, voice_actor_name in results:
@@ -683,78 +817,84 @@ def get_tts_generations(
         generation_dict["script"] = script.model_dump() if script else None
         generation_dict["voice_actor_name"] = voice_actor_name
         generations.append(TTSGenerationWithScript(**generation_dict))
-    
+
     return generations
+
 
 @router.get("/tts-generations/batch-status")
 def get_batch_generation_status(
     *,
     session: SessionDep,
     current_user: CurrentUser,
-    generation_ids: str = None  # 쉽표로 구분된 생성 ID 목록
+    generation_ids: str = None,  # 쉽표로 구분된 생성 ID 목록
 ):
     """배치 TTS 생성 상태 조회"""
     if not generation_ids:
         raise HTTPException(status_code=400, detail="생성 ID가 필요합니다.")
-    
+
     try:
         id_list = [uuid.UUID(id.strip()) for id in generation_ids.split(",")]
     except ValueError:
         raise HTTPException(status_code=400, detail="잘못된 ID 형식입니다.")
-    
+
     generations = []
     for gen_id in id_list:
         generation = session.get(TTSGeneration, gen_id)
         if generation and generation.requested_by == current_user.id:
             generations.append(generation)
-    
+
     # 상태 요약
     status_summary = {
         "total": len(generations),
-        "pending": len([g for g in generations if g.status == GenerationStatus.PENDING]),
-        "processing": len([g for g in generations if g.status == GenerationStatus.PROCESSING]),
-        "completed": len([g for g in generations if g.status == GenerationStatus.COMPLETED]),
+        "pending": len(
+            [g for g in generations if g.status == GenerationStatus.PENDING]
+        ),
+        "processing": len(
+            [g for g in generations if g.status == GenerationStatus.PROCESSING]
+        ),
+        "completed": len(
+            [g for g in generations if g.status == GenerationStatus.COMPLETED]
+        ),
         "failed": len([g for g in generations if g.status == GenerationStatus.FAILED]),
-        "cancelled": len([g for g in generations if g.status == GenerationStatus.CANCELLED])
+        "cancelled": len(
+            [g for g in generations if g.status == GenerationStatus.CANCELLED]
+        ),
     }
-    
+
     return {
         "generations": [TTSGenerationPublic.model_validate(g) for g in generations],
-        "summary": status_summary
+        "summary": status_summary,
     }
+
 
 @router.delete("/tts-generations/{generation_id}")
 async def cancel_tts_generation(
-    *,
-    session: SessionDep,
-    generation_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, generation_id: uuid.UUID, current_user: CurrentUser
 ):
     """TTS 생성 취소 (팩토리 패턴 사용)"""
     generation = session.get(TTSGeneration, generation_id)
     if not generation:
         raise HTTPException(status_code=404, detail="생성 작업을 찾을 수 없습니다.")
-    
+
     if generation.requested_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     # 🔄 팩토리에서 현재 TTS 서비스 가져오기
     tts_service = get_tts_service()
-    
+
     success = await tts_service.cancel_generation(generation_id)
     if success:
         return {"message": "TTS 생성이 취소되었습니다."}
     else:
         raise HTTPException(status_code=400, detail="취소할 수 없는 상태입니다.")
 
+
 # === TTS 라이브러리 관리 ===
+
 
 @router.post("/tts-library", response_model=TTSLibraryPublic)
 def create_tts_library(
-    *,
-    session: SessionDep,
-    library_in: TTSLibraryCreate,
-    current_user: CurrentUser
+    *, session: SessionDep, library_in: TTSLibraryCreate, current_user: CurrentUser
 ) -> TTSLibrary:
     """TTS 라이브러리 아이템 생성"""
     # 성우 존재 확인
@@ -762,15 +902,13 @@ def create_tts_library(
         voice_actor = session.get(VoiceActor, library_in.voice_actor_id)
         if not voice_actor:
             raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
-    library_item = TTSLibrary(
-        **library_in.model_dump(),
-        created_by=current_user.id
-    )
+
+    library_item = TTSLibrary(**library_in.model_dump(), created_by=current_user.id)
     session.add(library_item)
     session.commit()
     session.refresh(library_item)
     return library_item
+
 
 @router.get("/tts-library", response_model=List[TTSLibraryPublic])
 def get_tts_library(
@@ -781,11 +919,11 @@ def get_tts_library(
     limit: int = 50,
     category: Optional[str] = None,
     is_public: Optional[bool] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
 ) -> List[TTSLibrary]:
     """TTS 라이브러리 목록 조회"""
     statement = select(TTSLibrary)
-    
+
     # 필터 적용
     if category:
         statement = statement.where(TTSLibrary.category == category)
@@ -794,38 +932,40 @@ def get_tts_library(
     if search:
         search_term = f"%{search}%"
         statement = statement.where(
-            (TTSLibrary.name.ilike(search_term)) |
-            (TTSLibrary.text_content.ilike(search_term)) |
-            (TTSLibrary.tags.ilike(search_term))
+            (TTSLibrary.name.ilike(search_term))
+            | (TTSLibrary.text_content.ilike(search_term))
+            | (TTSLibrary.tags.ilike(search_term))
         )
-    
+
     # 공개 아이템 또는 본인이 생성한 아이템만 조회
     statement = statement.where(
-        (TTSLibrary.is_public == True) |
-        (TTSLibrary.created_by == current_user.id)
+        (TTSLibrary.is_public == True) | (TTSLibrary.created_by == current_user.id)
     )
-    
-    statement = statement.offset(skip).limit(limit).order_by(TTSLibrary.usage_count.desc())
+
+    statement = (
+        statement.offset(skip).limit(limit).order_by(TTSLibrary.usage_count.desc())
+    )
     library_items = session.exec(statement).all()
     return library_items
 
+
 @router.get("/tts-library/{library_id}", response_model=TTSLibraryPublic)
 def get_tts_library_item(
-    *,
-    session: SessionDep,
-    library_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, library_id: uuid.UUID, current_user: CurrentUser
 ) -> TTSLibrary:
     """TTS 라이브러리 아이템 조회"""
     library_item = session.get(TTSLibrary, library_id)
     if not library_item:
-        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
-    
+        raise HTTPException(
+            status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다."
+        )
+
     # 접근 권한 확인 (공개 아이템 또는 본인이 생성한 아이템)
     if not library_item.is_public and library_item.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     return library_item
+
 
 @router.put("/tts-library/{library_id}", response_model=TTSLibraryPublic)
 def update_tts_library_item(
@@ -833,120 +973,125 @@ def update_tts_library_item(
     session: SessionDep,
     library_id: uuid.UUID,
     library_in: TTSLibraryUpdate,
-    current_user: CurrentUser
+    current_user: CurrentUser,
 ) -> TTSLibrary:
     """TTS 라이브러리 아이템 수정"""
     library_item = session.get(TTSLibrary, library_id)
     if not library_item:
-        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
-    
+        raise HTTPException(
+            status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다."
+        )
+
     # 수정 권한 확인 (본인이 생성한 아이템만)
     if library_item.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
-    
+
     update_data = library_in.model_dump(exclude_unset=True)
     library_item.sqlmodel_update(update_data)
-    
+
     session.add(library_item)
     session.commit()
     session.refresh(library_item)
     return library_item
 
+
 @router.delete("/tts-library/{library_id}")
 def delete_tts_library_item(
-    *,
-    session: SessionDep,
-    library_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, library_id: uuid.UUID, current_user: CurrentUser
 ):
     """TTS 라이브러리 아이템 삭제"""
     library_item = session.get(TTSLibrary, library_id)
     if not library_item:
-        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
-    
+        raise HTTPException(
+            status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다."
+        )
+
     # 삭제 권한 확인 (본인이 생성한 아이템만)
     if library_item.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
-    
+
     session.delete(library_item)
     session.commit()
-    
+
     return {"message": "라이브러리 아이템이 삭제되었습니다."}
+
 
 @router.post("/tts-library/{library_id}/use")
 def use_tts_library_item(
-    *,
-    session: SessionDep,
-    library_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, library_id: uuid.UUID, current_user: CurrentUser
 ):
     """TTS 라이브러리 아이템 사용 (사용 횟수 증가)"""
     library_item = session.get(TTSLibrary, library_id)
     if not library_item:
-        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
-    
+        raise HTTPException(
+            status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다."
+        )
+
     # 접근 권한 확인
     if not library_item.is_public and library_item.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     # 사용 횟수 증가
     library_item.usage_count += 1
     session.add(library_item)
     session.commit()
-    
-    return {"message": "사용 횟수가 증가되었습니다.", "usage_count": library_item.usage_count}
+
+    return {
+        "message": "사용 횟수가 증가되었습니다.",
+        "usage_count": library_item.usage_count,
+    }
+
 
 @router.get("/tts-library/{library_id}/audio")
 def stream_library_audio(
-    *,
-    session: SessionDep,
-    library_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, library_id: uuid.UUID, current_user: CurrentUser
 ) -> StreamingResponse:
     """TTS 라이브러리 오디오 스트리밍"""
     library_item = session.get(TTSLibrary, library_id)
     if not library_item:
-        raise HTTPException(status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다.")
-    
+        raise HTTPException(
+            status_code=404, detail="라이브러리 아이템을 찾을 수 없습니다."
+        )
+
     # 접근 권한 확인
     if not library_item.is_public and library_item.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
-    
+
     if not library_item.audio_file_path:
         raise HTTPException(status_code=404, detail="오디오 파일이 없습니다.")
-    
+
     file_path = Path(library_item.audio_file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="오디오 파일을 찾을 수 없습니다.")
-    
+
     def iterfile():
         with open(file_path, "rb") as file:
             while chunk := file.read(1024):
                 yield chunk
-    
+
     return StreamingResponse(iterfile(), media_type="audio/wav")
+
 
 @router.get("/tts-library/categories", response_model=List[str])
 def get_tts_library_categories(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser
+    *, session: SessionDep, current_user: CurrentUser
 ) -> List[str]:
     """TTS 라이브러리 카테고리 목록 조회"""
-    statement = select(TTSLibrary.category).distinct().where(
-        TTSLibrary.category.isnot(None)
+    statement = (
+        select(TTSLibrary.category).distinct().where(TTSLibrary.category.isnot(None))
     )
-    
+
     # 공개 아이템 또는 본인이 생성한 아이템만
     statement = statement.where(
-        (TTSLibrary.is_public == True) |
-        (TTSLibrary.created_by == current_user.id)
+        (TTSLibrary.is_public == True) | (TTSLibrary.created_by == current_user.id)
     )
-    
+
     categories = session.exec(statement).all()
     return [cat for cat in categories if cat]  # None 값 제거
 
+
 # === 오디오 전처리 엔드포인트 ===
+
 
 @router.post("/audio/preprocess")
 async def preprocess_audio(
@@ -956,51 +1101,52 @@ async def preprocess_audio(
     apply_noise_reduction: bool = Form(True),
     apply_normalization: bool = Form(True),
     apply_silence_trim: bool = Form(True),
-    apply_voice_enhancement: bool = Form(True)
+    apply_voice_enhancement: bool = Form(True),
 ):
     """음성 샘플 전처리 (Voice Cloning 최적화)"""
     logger.info(f"🎤 Audio preprocessing requested by user {current_user.id}")
     logger.info(f"File: {audio_file.filename}, Size: {audio_file.size} bytes")
-    
+
     # 파일 검증
     if not audio_file.content_type or not audio_file.content_type.startswith("audio/"):
         raise HTTPException(status_code=400, detail="오디오 파일만 업로드 가능합니다.")
-    
+
     # 임시 파일로 저장
     temp_dir = Path("temp_audio")
     temp_dir.mkdir(exist_ok=True)
-    
+
     temp_input = temp_dir / f"input_{uuid.uuid4().hex[:8]}_{audio_file.filename}"
-    
+
     try:
         # 파일 저장
         with open(temp_input, "wb") as buffer:
             content = await audio_file.read()
             buffer.write(content)
-        
+
         # 전처리 옵션 설정
         apply_all = (
-            apply_noise_reduction and 
-            apply_normalization and 
-            apply_silence_trim and 
-            apply_voice_enhancement
+            apply_noise_reduction
+            and apply_normalization
+            and apply_silence_trim
+            and apply_voice_enhancement
         )
-        
+
         # 전처리 수행
-        processed_path, processing_info = audio_preprocessor.preprocess_for_voice_cloning(
-            str(temp_input),
-            apply_all=apply_all
+        processed_path, processing_info = (
+            audio_preprocessor.preprocess_for_voice_cloning(
+                str(temp_input), apply_all=apply_all
+            )
         )
-        
+
         # 원본 파일 분석
         original_analysis = audio_preprocessor.analyze_audio(str(temp_input))
-        
+
         # 처리된 파일 분석
         processed_analysis = audio_preprocessor.analyze_audio(processed_path)
-        
+
         # 개선 사항 추천
         recommendations = audio_preprocessor.recommend_improvements(original_analysis)
-        
+
         # 결과 반환
         return {
             "message": "오디오 전처리 완료",
@@ -1009,7 +1155,7 @@ async def preprocess_audio(
                 "sample_rate": original_analysis["sample_rate"],
                 "duration": f"{original_analysis['duration']:.2f}초",
                 "quality_score": f"{original_analysis['quality_score']:.1f}/100",
-                "db_level": f"{original_analysis['db_level']:.1f} dB"
+                "db_level": f"{original_analysis['db_level']:.1f} dB",
             },
             "processed": {
                 "filename": Path(processed_path).name,
@@ -1017,54 +1163,55 @@ async def preprocess_audio(
                 "duration": f"{processed_analysis['duration']:.2f}초",
                 "quality_score": f"{processed_analysis['quality_score']:.1f}/100",
                 "db_level": f"{processed_analysis['db_level']:.1f} dB",
-                "download_url": f"/api/v1/voice-actors/audio/download/{Path(processed_path).name}"
+                "download_url": f"/api/v1/voice-actors/audio/download/{Path(processed_path).name}",
             },
             "improvements": {
                 "applied_processes": processing_info["applied_processes"],
                 "quality_improvement": f"+{processed_analysis['quality_score'] - original_analysis['quality_score']:.1f}점",
-                "recommendations": recommendations
-            }
+                "recommendations": recommendations,
+            },
         }
-        
+
     except Exception as e:
         logger.error(f"Audio preprocessing failed: {e}")
-        raise HTTPException(status_code=500, detail=f"오디오 전처리 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"오디오 전처리 중 오류 발생: {str(e)}"
+        )
     finally:
         # 임시 파일 정리
         if temp_input.exists():
             temp_input.unlink()
 
+
 @router.post("/audio/analyze")
 async def analyze_audio(
-    *,
-    current_user: CurrentUser,
-    audio_file: UploadFile = File(...)
+    *, current_user: CurrentUser, audio_file: UploadFile = File(...)
 ):
     """음성 파일 분석 (전처리 없이)"""
     logger.info(f"🔍 Audio analysis requested by user {current_user.id}")
-    
+
     # 파일 검증
     if not audio_file.content_type or not audio_file.content_type.startswith("audio/"):
         raise HTTPException(status_code=400, detail="오디오 파일만 분석 가능합니다.")
-    
+
     # 임시 파일로 저장
     temp_dir = Path("temp_audio")
     temp_dir.mkdir(exist_ok=True)
-    
+
     temp_file = temp_dir / f"analyze_{uuid.uuid4().hex[:8]}_{audio_file.filename}"
-    
+
     try:
         # 파일 저장
         with open(temp_file, "wb") as buffer:
             content = await audio_file.read()
             buffer.write(content)
-        
+
         # 분석 수행
         analysis = audio_preprocessor.analyze_audio(str(temp_file))
-        
+
         # 개선 사항 추천
         recommendations = audio_preprocessor.recommend_improvements(analysis)
-        
+
         return {
             "filename": audio_file.filename,
             "analysis": {
@@ -1075,49 +1222,49 @@ async def analyze_audio(
                 "rms_level": f"{analysis['rms_level']:.3f}",
                 "db_level": f"{analysis['db_level']:.1f} dB",
                 "clipping_samples": analysis["clipping_samples"],
-                "silence_ratio": f"{analysis['silence_ratio']*100:.1f}%",
-                "quality_score": f"{analysis['quality_score']:.1f}/100"
+                "silence_ratio": f"{analysis['silence_ratio'] * 100:.1f}%",
+                "quality_score": f"{analysis['quality_score']:.1f}/100",
             },
             "recommendations": recommendations,
-            "voice_cloning_ready": analysis["quality_score"] >= 70
+            "voice_cloning_ready": analysis["quality_score"] >= 70,
         }
-        
+
     except Exception as e:
         logger.error(f"Audio analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"오디오 분석 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"오디오 분석 중 오류 발생: {str(e)}"
+        )
     finally:
         # 임시 파일 정리
         if temp_file.exists():
             temp_file.unlink()
 
+
 @router.get("/audio/download/{filename}")
 def download_preprocessed_audio(
-    *,
-    filename: str,
-    current_user: CurrentUser
+    *, filename: str, current_user: CurrentUser
 ) -> StreamingResponse:
     """전처리된 오디오 파일 다운로드"""
     file_path = Path("preprocessed_audio") / filename
-    
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
-    
+
     # 보안을 위해 파일명 검증
     if ".." in filename or "/" in filename:
         raise HTTPException(status_code=400, detail="잘못된 파일명입니다.")
-    
+
     def iterfile():
         with open(file_path, "rb") as file:
             while chunk := file.read(1024):
                 yield chunk
-    
+
     return StreamingResponse(
-        iterfile(), 
+        iterfile(),
         media_type="audio/wav",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
 
 @router.post("/audio/batch-preprocess")
 async def batch_preprocess_audio(
@@ -1125,70 +1272,73 @@ async def batch_preprocess_audio(
     session: SessionDep,
     current_user: CurrentUser,
     voice_actor_id: uuid.UUID = Form(...),
-    process_all_samples: bool = Form(False)
+    process_all_samples: bool = Form(False),
 ):
     """성우의 모든 음성 샘플 일괄 전처리"""
     logger.info(f"🎤 Batch audio preprocessing for voice actor {voice_actor_id}")
-    
+
     # 성우 확인
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
+
     # 음성 샘플 조회
     samples = session.exec(
         select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
     ).all()
-    
+
     if not samples:
         raise HTTPException(status_code=404, detail="처리할 음성 샘플이 없습니다.")
-    
+
     # 처리할 파일 목록
     input_files = []
     for sample in samples:
         if Path(sample.audio_file_path).exists():
             input_files.append(sample.audio_file_path)
-    
+
     if not input_files:
         raise HTTPException(status_code=404, detail="유효한 음성 파일이 없습니다.")
-    
+
     try:
         # 일괄 전처리
         output_dir = Path("preprocessed_audio") / str(voice_actor_id)
         results = audio_preprocessor.batch_preprocess(input_files, str(output_dir))
-        
+
         # 결과 정리
         processed_count = 0
         failed_count = 0
         total_quality_improvement = 0
-        
+
         for i, (processed_path, info) in enumerate(results):
             if processed_path and "error" not in info:
                 processed_count += 1
-                
+
                 # 품질 향상도 계산
                 original_analysis = audio_preprocessor.analyze_audio(input_files[i])
                 processed_analysis = audio_preprocessor.analyze_audio(processed_path)
-                quality_improvement = processed_analysis["quality_score"] - original_analysis["quality_score"]
+                quality_improvement = (
+                    processed_analysis["quality_score"]
+                    - original_analysis["quality_score"]
+                )
                 total_quality_improvement += quality_improvement
-                
+
                 # 선택적으로 원본 파일 교체
                 if process_all_samples:
                     # 백업 생성
                     backup_path = Path(input_files[i]).with_suffix(".bak")
                     Path(input_files[i]).rename(backup_path)
-                    
+
                     # 전처리된 파일로 교체
                     Path(processed_path).rename(input_files[i])
-                    
+
                     logger.info(f"Replaced original file: {input_files[i]}")
             else:
                 failed_count += 1
-        
+
         avg_quality_improvement = (
             total_quality_improvement / processed_count if processed_count > 0 else 0
         )
-        
+
         return {
             "message": "일괄 전처리 완료",
             "voice_actor": voice_actor.name,
@@ -1197,122 +1347,113 @@ async def batch_preprocess_audio(
                 "processed": processed_count,
                 "failed": failed_count,
                 "average_quality_improvement": f"+{avg_quality_improvement:.1f}점",
-                "files_replaced": process_all_samples
-            }
+                "files_replaced": process_all_samples,
+            },
         }
-        
+
     except Exception as e:
         logger.error(f"Batch preprocessing failed: {e}")
-        raise HTTPException(status_code=500, detail=f"일괄 전처리 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"일괄 전처리 중 오류 발생: {str(e)}"
+        )
+
 
 # === 디버깅 엔드포인트 ===
 
+
 @router.get("/debug/diagnosis")
-async def diagnose_tts_environment(
-    *,
-    current_user: CurrentUser
-):
+async def diagnose_tts_environment(*, current_user: CurrentUser):
     """TTS 환경 전체 진단 (팩토리 패턴 사용)"""
     logger.info(f"TTS diagnosis requested by user {current_user.id}")
-    
+
     try:
         # 🔄 팩토리에서 현재 TTS 서비스 가져오기
         tts_service = get_tts_service()
-        
+
         # 기본 TTS 진단 수행
         await tts_service.initialize_tts_model()
-        
+
         diagnosis = {
-            "tts_mode": "Real TTS" if getattr(tts_service, 'tts_model', None) != "mock" else "Mock TTS",
-            "model_loaded": getattr(tts_service, 'model_loaded', False),
-            "gpu_enabled": getattr(tts_service, 'use_gpu', False),
-            "status": "healthy"
+            "tts_mode": "Real TTS"
+            if getattr(tts_service, "tts_model", None) != "mock"
+            else "Mock TTS",
+            "model_loaded": getattr(tts_service, "model_loaded", False),
+            "gpu_enabled": getattr(tts_service, "use_gpu", False),
+            "status": "healthy",
         }
-        
-        return {
-            "message": "TTS 환경 진단 완료",
-            "diagnosis": diagnosis
-        }
+
+        return {"message": "TTS 환경 진단 완료", "diagnosis": diagnosis}
     except Exception as e:
         logger.error(f"TTS diagnosis failed: {e}")
         return {
             "message": "TTS 환경 진단 실패",
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": type(e).__name__,
         }
 
+
 @router.post("/debug/fix-issues")
-async def fix_common_tts_issues(
-    *,
-    current_user: CurrentUser
-):
+async def fix_common_tts_issues(*, current_user: CurrentUser):
     """일반적인 TTS 문제들 자동 수정 (팩토리 패턴 사용)"""
     logger.info(f"TTS auto-fix requested by user {current_user.id}")
-    
+
     try:
         # 기본 문제 수정 수행
         results = {
             "directories_created": 0,
             "permissions_fixed": 0,
-            "tts_model_reloaded": False
+            "tts_model_reloaded": False,
         }
-        
+
         # 디렉토리 생성 확인
         from pathlib import Path
+
         audio_dir = Path("audio_files")
         voice_dir = Path("voice_samples")
-        
+
         if not audio_dir.exists():
             audio_dir.mkdir(parents=True, exist_ok=True)
             results["directories_created"] += 1
-            
+
         if not voice_dir.exists():
             voice_dir.mkdir(parents=True, exist_ok=True)
             results["directories_created"] += 1
-        
+
         # 🔄 팩토리에서 현재 TTS 서비스 가져오기
         tts_service = get_tts_service()
-        
+
         # TTS 모델 재로드
         try:
             await tts_service.initialize_tts_model()
             results["tts_model_reloaded"] = True
         except Exception as e:
             logger.warning(f"TTS model reload failed: {e}")
-        
-        return {
-            "message": "TTS 문제 자동 수정 완료",
-            "results": results
-        }
+
+        return {"message": "TTS 문제 자동 수정 완료", "results": results}
     except Exception as e:
         logger.error(f"TTS auto-fix failed: {e}")
-        return {
-            "message": "TTS 문제 자동 수정 실패",
-            "error": str(e)
-        }
+        return {"message": "TTS 문제 자동 수정 실패", "error": str(e)}
+
 
 @router.post("/test-tts")
-async def test_tts_functionality(
-    *,
-    current_user: CurrentUser
-):
+async def test_tts_functionality(*, current_user: CurrentUser):
     """TTS 기능 테스트 엔드포인트 (팩토리 패턴 사용)"""
     logger.info(f"🧪 TTS functionality test requested by user {current_user.id}")
-    
+
     try:
         # 🔄 팩토리에서 현재 TTS 서비스 가져오기
         tts_service = get_tts_service()
-        
+
         # TTS 서비스 기능 테스트
         test_result = await tts_service.test_tts_functionality()
-        
+
         return {
             "message": "TTS 기능 테스트 완료",
             "timestamp": datetime.now().isoformat(),
             "test_result": test_result,
-            "status": "success" if test_result.get("success") else "failed"
+            "status": "success" if test_result.get("success") else "failed",
         }
-        
+
     except Exception as e:
         logger.error(f"❌ TTS functionality test failed: {e}")
         return {
@@ -1320,8 +1461,9 @@ async def test_tts_functionality(
             "timestamp": datetime.now().isoformat(),
             "error": str(e),
             "error_type": type(e).__name__,
-            "status": "error"
+            "status": "error",
         }
+
 
 @router.post("/generate-test-tts")
 async def generate_test_tts(
@@ -1330,12 +1472,12 @@ async def generate_test_tts(
     current_user: CurrentUser,
     background_tasks: BackgroundTasks,
     test_text: str = "안녕하세요. 이것은 TTS 테스트 음성입니다. 개선된 음성 품질을 확인해보세요.",
-    voice_actor_id: Optional[uuid.UUID] = None
+    voice_actor_id: Optional[uuid.UUID] = None,
 ):
     """테스트용 TTS 생성 (팩토리 패턴 사용)"""
     logger.info(f"🎙️ Test TTS generation requested by user {current_user.id}")
     logger.info(f"Text: '{test_text[:50]}...'")
-    
+
     try:
         # 테스트 TTS 스크립트 생성
         test_script = TTSScript(
@@ -1345,46 +1487,45 @@ async def generate_test_tts(
                 "speed": 1.0,
                 "tone": "friendly",
                 "emotion": "bright",
-                "test_mode": True
+                "test_mode": True,
             },
-            created_by=current_user.id
+            created_by=current_user.id,
         )
-        
+
         session.add(test_script)
         session.commit()
         session.refresh(test_script)
-        
+
         # TTS 생성 작업 생성
         test_generation = TTSGeneration(
             script_id=test_script.id,
             generation_params={
                 "quality": "high",
                 "test_mode": True,
-                "priority": "high"
+                "priority": "high",
             },
-            requested_by=current_user.id
+            requested_by=current_user.id,
         )
-        
+
         session.add(test_generation)
         session.commit()
         session.refresh(test_generation)
-        
+
         # 🔄 팩토리에서 현재 TTS 서비스 가져오기
         tts_service = get_tts_service()
-        
+
         # 백그라운드에서 즉시 처리
         background_tasks.add_task(
-            tts_service.process_tts_generation,
-            test_generation.id
+            tts_service.process_tts_generation, test_generation.id
         )
-        
+
         # 성우 정보 추가
         voice_actor_name = None
         if voice_actor_id:
             voice_actor = session.get(VoiceActor, voice_actor_id)
             if voice_actor:
                 voice_actor_name = voice_actor.name
-        
+
         return {
             "message": "테스트 TTS 생성이 시작되었습니다",
             "timestamp": datetime.now().isoformat(),
@@ -1393,9 +1534,9 @@ async def generate_test_tts(
             "text_content": test_text,
             "voice_actor_name": voice_actor_name,
             "estimated_time": "30-60초",
-            "status": "pending"
+            "status": "pending",
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Test TTS generation failed: {e}")
         return {
@@ -1403,103 +1544,204 @@ async def generate_test_tts(
             "timestamp": datetime.now().isoformat(),
             "error": str(e),
             "error_type": type(e).__name__,
-            "status": "error"
+            "status": "error",
         }
 
+
+@router.get("/tts-presets")
+async def get_tts_presets(*, current_user: CurrentUser):
+    """사용 가능한 TTS 파라미터 프리셋 조회"""
+    from app.services.tts_service import KOREAN_TTS_PRESETS
+
+    logger.info(f"🎭 TTS 프리셋 조회 요청 - 사용자: {current_user.id}")
+
+    try:
+        # 프리셋 정보를 더 사용자 친화적인 형태로 변환
+        presets_info = {}
+        for preset_key, preset_data in KOREAN_TTS_PRESETS.items():
+            presets_info[preset_key] = {
+                "name": preset_data["name"],
+                "description": preset_data["description"],
+                "parameters": {
+                    "temperature": preset_data["temperature"],
+                    "repetition_penalty": preset_data["repetition_penalty"],
+                    "top_k": preset_data["top_k"],
+                    "top_p": preset_data["top_p"],
+                    "length_penalty": preset_data["length_penalty"],
+                },
+                "recommended_for": _get_preset_recommendations(preset_key),
+            }
+
+        return {
+            "message": "TTS 프리셋 조회 완료",
+            "timestamp": datetime.now().isoformat(),
+            "total_presets": len(presets_info),
+            "presets": presets_info,
+            "usage": {
+                "default_presets": ["natural", "professional", "warm"],
+                "example_request": {
+                    "presets": ["natural", "professional"],
+                    "description": "자연스러운 음성과 전문적인 음성 2가지 버전 생성",
+                },
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"❌ TTS 프리셋 조회 실패: {e}")
+        return {
+            "message": "TTS 프리셋 조회 실패",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }
+
+
+def _get_preset_recommendations(preset_key: str) -> List[str]:
+    """프리셋별 추천 사용 상황"""
+    recommendations = {
+        "natural": [
+            "일반적인 안내 멘트",
+            "친근한 고객 응대",
+            "일상적인 대화",
+        ],
+        "professional": [
+            "공식적인 업무 안내",
+            "기업 홍보",
+            "정확한 정보 전달",
+        ],
+        "warm": [
+            "고객 서비스",
+            "감사 인사",
+            "친근한 환영 메시지",
+        ],
+        "clear": [
+            "중요한 안내사항",
+            "긴급 공지",
+            "명확한 지시사항",
+        ],
+        "gentle": [
+            "위로의 메시지",
+            "차분한 안내",
+            "부드러운 설명",
+        ],
+        "energetic": [
+            "홍보 및 광고",
+            "이벤트 안내",
+            "활기찬 환영 메시지",
+        ],
+    }
+    return recommendations.get(preset_key, ["일반적인 용도"])
+
+
 @router.get("/tts-status")
-async def get_tts_service_status(
-    *,
-    current_user: CurrentUser
-):
+async def get_tts_service_status(*, current_user: CurrentUser):
     """TTS 서비스 상태 조회 (팩토리 패턴 사용)"""
     logger.info(f"📊 TTS service status requested by user {current_user.id}")
-    
+
     try:
         # 🔄 팩토리에서 현재 TTS 서비스 가져오기
         tts_service = get_tts_service()
-        
+
         # TTS 모델 초기화 상태 확인
         await tts_service.initialize_tts_model()
-        
+
         # 디렉토리 상태 확인
         audio_files_dir = Path("audio_files")
         voice_samples_dir = Path("voice_samples")
-        
-        audio_files_count = len(list(audio_files_dir.glob("*.wav"))) if audio_files_dir.exists() else 0
-        voice_samples_count = len(list(voice_samples_dir.rglob("*.wav"))) if voice_samples_dir.exists() else 0
-        
+
+        audio_files_count = (
+            len(list(audio_files_dir.glob("*.wav"))) if audio_files_dir.exists() else 0
+        )
+        voice_samples_count = (
+            len(list(voice_samples_dir.rglob("*.wav")))
+            if voice_samples_dir.exists()
+            else 0
+        )
+
         # TTS 모델 상태
-        tts_mode = "Real TTS" if getattr(tts_service, 'tts_model', None) != "mock" else "Mock TTS"
-        model_status = "loaded" if getattr(tts_service, 'model_loaded', False) else "not_loaded"
-        
+        tts_mode = (
+            "Real TTS"
+            if getattr(tts_service, "tts_model", None) != "mock"
+            else "Mock TTS"
+        )
+        model_status = (
+            "loaded" if getattr(tts_service, "model_loaded", False) else "not_loaded"
+        )
+
         # GPU 상태 확인
         gpu_status = "unavailable"
         try:
             import torch
+
             if torch.cuda.is_available():
                 gpu_status = f"available ({torch.cuda.device_count()} devices)"
             else:
                 gpu_status = "cuda_unavailable"
         except ImportError:
             gpu_status = "torch_not_installed"
-        
+
         return {
             "timestamp": datetime.now().isoformat(),
             "service_status": "healthy",
             "tts_mode": tts_mode,
             "model_status": model_status,
             "gpu_status": gpu_status,
-            "gpu_enabled": getattr(tts_service, 'use_gpu', False),
+            "gpu_enabled": getattr(tts_service, "use_gpu", False),
             "directories": {
                 "audio_files": {
                     "path": str(audio_files_dir),
                     "exists": audio_files_dir.exists(),
-                    "files_count": audio_files_count
+                    "files_count": audio_files_count,
                 },
                 "voice_samples": {
                     "path": str(voice_samples_dir),
                     "exists": voice_samples_dir.exists(),
-                    "files_count": voice_samples_count
-                }
+                    "files_count": voice_samples_count,
+                },
             },
             "recommendations": [
-                "🎙️ 실제 음성을 원하면 Coqui TTS 라이브러리를 설치하세요" if tts_mode == "Mock TTS" else "✅ 실제 TTS 모델이 활성화되어 있습니다",
-                "⚡ GPU 가속을 위해 CUDA를 설치하세요" if gpu_status == "cuda_unavailable" else "✅ GPU 가속이 사용 가능합니다" if "available" in gpu_status else "ℹ️ CPU 모드로 동작 중입니다"
-            ]
+                "🎙️ 실제 음성을 원하면 Coqui TTS 라이브러리를 설치하세요"
+                if tts_mode == "Mock TTS"
+                else "✅ 실제 TTS 모델이 활성화되어 있습니다",
+                "⚡ GPU 가속을 위해 CUDA를 설치하세요"
+                if gpu_status == "cuda_unavailable"
+                else "✅ GPU 가속이 사용 가능합니다"
+                if "available" in gpu_status
+                else "ℹ️ CPU 모드로 동작 중입니다",
+            ],
         }
-        
+
     except Exception as e:
         logger.error(f"❌ TTS service status check failed: {e}")
         return {
             "timestamp": datetime.now().isoformat(),
             "service_status": "error",
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": type(e).__name__,
         }
+
 
 # === 성우 관리 (path parameter를 포함한 경로는 마지막에 정의) ===
 
+
 @router.post("/", response_model=VoiceActorPublic)
 def create_voice_actor(
-    *,
-    session: SessionDep,
-    voice_actor_in: VoiceActorCreate,
-    current_user: CurrentUser
+    *, session: SessionDep, voice_actor_in: VoiceActorCreate, current_user: CurrentUser
 ) -> VoiceActorPublic:
     """새 성우 등록"""
-    voice_actor = VoiceActor(
-        **voice_actor_in.model_dump(),
-        created_by=current_user.id
-    )
+    voice_actor = VoiceActor(**voice_actor_in.model_dump(), created_by=current_user.id)
     session.add(voice_actor)
     session.commit()
     session.refresh(voice_actor)
-    
+
     try:
         return VoiceActorPublic.model_validate(voice_actor)
     except Exception as e:
         logger.error(f"❌ Failed to convert new voice actor {voice_actor.id}: {e}")
-        raise HTTPException(status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다."
+        )
+
 
 @router.get("/", response_model=List[VoiceActorPublic])
 def get_voice_actors(
@@ -1511,14 +1753,16 @@ def get_voice_actors(
     gender: Optional[GenderType] = None,
     age_range: Optional[AgeRangeType] = None,
     language: Optional[str] = None,
-    is_active: Optional[bool] = None
+    is_active: Optional[bool] = None,
 ) -> List[VoiceActorPublic]:
     """성우 목록 조회"""
-    logger.info(f"🎯 GET /voice-actors called with filters: gender={gender}, age_range={age_range}, language={language}, is_active={is_active}")
-    
+    logger.info(
+        f"🎯 GET /voice-actors called with filters: gender={gender}, age_range={age_range}, language={language}, is_active={is_active}"
+    )
+
     try:
         statement = select(VoiceActor)
-        
+
         # 필터 적용
         if gender:
             statement = statement.where(VoiceActor.gender == gender)
@@ -1528,12 +1772,12 @@ def get_voice_actors(
             statement = statement.where(VoiceActor.language == language)
         if is_active is not None:
             statement = statement.where(VoiceActor.is_active == is_active)
-        
+
         statement = statement.offset(skip).limit(limit)
         voice_actors = session.exec(statement).all()
-        
+
         logger.info(f"📊 Found {len(voice_actors)} voice actors")
-        
+
         # VoiceActor 객체들을 VoiceActorPublic으로 변환
         public_actors = []
         for actor in voice_actors:
@@ -1543,32 +1787,35 @@ def get_voice_actors(
             except Exception as e:
                 logger.error(f"❌ Failed to convert voice actor {actor.id}: {e}")
                 continue
-        
-        logger.info(f"✅ Successfully converted {len(public_actors)} out of {len(voice_actors)} voice actors")
+
+        logger.info(
+            f"✅ Successfully converted {len(public_actors)} out of {len(voice_actors)} voice actors"
+        )
         return public_actors
-        
+
     except Exception as e:
         logger.error(f"💥 ERROR in get_voice_actors: {e}")
         raise HTTPException(status_code=500, detail=f"성우 목록 조회 중 오류: {str(e)}")
 
+
 # path parameter를 가진 경로들은 마지막에 정의
 @router.get("/{voice_actor_id}", response_model=VoiceActorPublic)
 def get_voice_actor(
-    *,
-    session: SessionDep,
-    voice_actor_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, voice_actor_id: uuid.UUID, current_user: CurrentUser
 ) -> VoiceActorPublic:
     """특정 성우 조회"""
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
+
     try:
         return VoiceActorPublic.model_validate(voice_actor)
     except Exception as e:
         logger.error(f"❌ Failed to convert voice actor {voice_actor_id}: {e}")
-        raise HTTPException(status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다."
+        )
+
 
 @router.put("/{voice_actor_id}", response_model=VoiceActorPublic)
 def update_voice_actor(
@@ -1576,45 +1823,45 @@ def update_voice_actor(
     session: SessionDep,
     voice_actor_id: uuid.UUID,
     voice_actor_in: VoiceActorUpdate,
-    current_user: CurrentUser
+    current_user: CurrentUser,
 ) -> VoiceActorPublic:
     """성우 정보 수정"""
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
+
     update_data = voice_actor_in.model_dump(exclude_unset=True)
     voice_actor.sqlmodel_update(update_data)
-    
+
     session.add(voice_actor)
     session.commit()
     session.refresh(voice_actor)
-    
+
     try:
         return VoiceActorPublic.model_validate(voice_actor)
     except Exception as e:
         logger.error(f"❌ Failed to convert updated voice actor {voice_actor_id}: {e}")
-        raise HTTPException(status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="성우 데이터 변환 중 오류가 발생했습니다."
+        )
+
 
 @router.delete("/{voice_actor_id}")
 def delete_voice_actor(
-    *,
-    session: SessionDep,
-    voice_actor_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, voice_actor_id: uuid.UUID, current_user: CurrentUser
 ):
     """성우 삭제 (비활성화 및 관련 파일 삭제)"""
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
+
     logger.info(f"🗑️ Deleting voice actor {voice_actor.name} (ID: {voice_actor_id})")
-    
+
     # 1. 해당 성우의 모든 음성 샘플 조회 및 파일 삭제
     samples = session.exec(
         select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
     ).all()
-    
+
     deleted_sample_count = 0
     for sample in samples:
         if sample.audio_file_path:
@@ -1625,24 +1872,26 @@ def delete_voice_actor(
                     deleted_sample_count += 1
                     logger.info(f"✅ Deleted sample file: {file_path}")
             except Exception as e:
-                logger.warning(f"⚠️ Failed to delete sample file {sample.audio_file_path}: {e}")
-        
+                logger.warning(
+                    f"⚠️ Failed to delete sample file {sample.audio_file_path}: {e}"
+                )
+
         # DB에서 샘플 레코드 삭제
         session.delete(sample)
-    
+
     # 2. 해당 성우로 생성된 모든 TTS 파일 삭제
     # 먼저 해당 성우의 TTS 스크립트 찾기
     scripts = session.exec(
         select(TTSScript).where(TTSScript.voice_actor_id == voice_actor_id)
     ).all()
-    
+
     deleted_tts_count = 0
     for script in scripts:
         # 각 스크립트의 생성된 TTS 파일 찾기
         generations = session.exec(
             select(TTSGeneration).where(TTSGeneration.script_id == script.id)
         ).all()
-        
+
         for generation in generations:
             if generation.audio_file_path:
                 try:
@@ -1652,8 +1901,10 @@ def delete_voice_actor(
                         deleted_tts_count += 1
                         logger.info(f"✅ Deleted TTS file: {file_path}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Failed to delete TTS file {generation.audio_file_path}: {e}")
-    
+                    logger.warning(
+                        f"⚠️ Failed to delete TTS file {generation.audio_file_path}: {e}"
+                    )
+
     # 3. 샘플 디렉토리 정리 (빈 디렉토리 삭제)
     try:
         samples_dir = Path("voice_samples") / str(voice_actor_id)
@@ -1662,23 +1913,26 @@ def delete_voice_actor(
             logger.info(f"✅ Removed empty samples directory: {samples_dir}")
     except Exception as e:
         logger.warning(f"⚠️ Failed to remove samples directory: {e}")
-    
+
     # 4. 성우 비활성화 (soft delete)
     voice_actor.is_active = False
     session.add(voice_actor)
     session.commit()
-    
-    logger.info(f"✅ Voice actor {voice_actor.name} deleted successfully. "
-                f"Deleted {deleted_sample_count} sample files and {deleted_tts_count} TTS files.")
-    
+
+    logger.info(
+        f"✅ Voice actor {voice_actor.name} deleted successfully. "
+        f"Deleted {deleted_sample_count} sample files and {deleted_tts_count} TTS files."
+    )
+
     return {
         "message": f"성우가 삭제되었습니다.",
         "details": {
             "voice_actor_name": voice_actor.name,
             "deleted_samples": deleted_sample_count,
-            "deleted_tts_files": deleted_tts_count
-        }
+            "deleted_tts_files": deleted_tts_count,
+        },
     }
+
 
 @router.post("/{voice_actor_id}/samples", response_model=VoiceSamplePublic)
 async def upload_voice_sample(
@@ -1687,66 +1941,70 @@ async def upload_voice_sample(
     voice_actor_id: uuid.UUID,
     current_user: CurrentUser,
     audio_file: UploadFile = File(...),
-    text_content: str = Form(...)
+    text_content: str = Form(...),
 ) -> VoiceSamplePublic:
     """음성 샘플 업로드"""
     # 성우 존재 확인
     voice_actor = session.get(VoiceActor, voice_actor_id)
     if not voice_actor:
         raise HTTPException(status_code=404, detail="성우를 찾을 수 없습니다.")
-    
+
     # 파일 검증
     if not audio_file.content_type or not audio_file.content_type.startswith("audio/"):
         raise HTTPException(status_code=400, detail="오디오 파일만 업로드 가능합니다.")
-    
+
     # 파일 저장
     samples_dir = Path("voice_samples") / str(voice_actor_id)
     samples_dir.mkdir(parents=True, exist_ok=True)
-    
+
     file_extension = Path(audio_file.filename or "sample.wav").suffix or ".wav"
     filename = f"sample_{uuid.uuid4().hex[:8]}{file_extension}"
     file_path = samples_dir / filename
-    
+
     # 파일 저장
     with open(file_path, "wb") as buffer:
         content = await audio_file.read()
         buffer.write(content)
-    
+
     # 데이터베이스에 정보 저장
     voice_sample = VoiceSample(
         voice_actor_id=voice_actor_id,
         text_content=text_content,
         audio_file_path=str(file_path),
         file_size=len(content),
-        uploaded_by=current_user.id
+        uploaded_by=current_user.id,
     )
-    
+
     session.add(voice_sample)
     session.commit()
     session.refresh(voice_sample)
-    
+
     try:
         return VoiceSamplePublic.model_validate(voice_sample)
     except Exception as e:
-        logger.error(f"❌ Failed to convert uploaded voice sample {voice_sample.id}: {e}")
-        raise HTTPException(status_code=500, detail="음성 샘플 데이터 변환 중 오류가 발생했습니다.")
+        logger.error(
+            f"❌ Failed to convert uploaded voice sample {voice_sample.id}: {e}"
+        )
+        raise HTTPException(
+            status_code=500, detail="음성 샘플 데이터 변환 중 오류가 발생했습니다."
+        )
+
 
 @router.get("/{voice_actor_id}/samples", response_model=List[VoiceSamplePublic])
 def get_voice_samples(
-    *,
-    session: SessionDep,
-    voice_actor_id: uuid.UUID,
-    current_user: CurrentUser
+    *, session: SessionDep, voice_actor_id: uuid.UUID, current_user: CurrentUser
 ) -> List[VoiceSamplePublic]:
     """성우 음성 샘플 목록"""
     logger.info(f"🎯 GET /voice-actors/{voice_actor_id}/samples called")
-    
+
     try:
-        statement = select(VoiceSample).where(VoiceSample.voice_actor_id == voice_actor_id)
+        statement = select(VoiceSample).where(
+            VoiceSample.voice_actor_id == voice_actor_id
+        )
         samples = session.exec(statement).all()
-        
+
         logger.info(f"📊 Found {len(samples)} voice samples")
-        
+
         # VoiceSample 객체들을 VoiceSamplePublic으로 변환
         public_samples = []
         for sample in samples:
@@ -1756,13 +2014,18 @@ def get_voice_samples(
             except Exception as e:
                 logger.error(f"❌ Failed to convert voice sample {sample.id}: {e}")
                 continue
-        
-        logger.info(f"✅ Successfully converted {len(public_samples)} out of {len(samples)} voice samples")
+
+        logger.info(
+            f"✅ Successfully converted {len(public_samples)} out of {len(samples)} voice samples"
+        )
         return public_samples
-        
+
     except Exception as e:
         logger.error(f"💥 ERROR in get_voice_samples: {e}")
-        raise HTTPException(status_code=500, detail=f"음성 샘플 목록 조회 중 오류: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"음성 샘플 목록 조회 중 오류: {str(e)}"
+        )
+
 
 @router.get("/{voice_actor_id}/samples/{sample_id}/audio")
 def stream_voice_sample(
@@ -1770,25 +2033,27 @@ def stream_voice_sample(
     session: SessionDep,
     voice_actor_id: uuid.UUID,
     sample_id: uuid.UUID,
-    current_user: CurrentUser
+    current_user: CurrentUser,
 ) -> StreamingResponse:
     """음성 샘플 스트리밍"""
     sample = session.get(VoiceSample, sample_id)
     if not sample or sample.voice_actor_id != voice_actor_id:
         raise HTTPException(status_code=404, detail="음성 샘플을 찾을 수 없습니다.")
-    
+
     file_path = Path(sample.audio_file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="오디오 파일을 찾을 수 없습니다.")
-    
+
     def iterfile():
         with open(file_path, "rb") as file:
             while chunk := file.read(1024):
                 yield chunk
-    
+
     return StreamingResponse(iterfile(), media_type="audio/wav")
 
+
 # === 배치 TTS 생성 클래스 ===
+
 
 class BatchTTSRequest(SQLModel):
     script_ids: List[uuid.UUID]
