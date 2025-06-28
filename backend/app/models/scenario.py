@@ -58,7 +58,6 @@ class Scenario(ScenarioBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_by: uuid.UUID = Field(foreign_key="user.id")
     updated_by: Optional[uuid.UUID] = Field(foreign_key="user.id")
-    deployed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     
@@ -113,7 +112,6 @@ class ScenarioPublic(ScenarioBase):
     id: uuid.UUID
     created_by: uuid.UUID
     updated_by: Optional[uuid.UUID] = None
-    deployed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

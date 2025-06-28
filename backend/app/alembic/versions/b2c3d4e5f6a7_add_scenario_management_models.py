@@ -34,7 +34,6 @@ def upgrade() -> None:
         sa.Column('scenario_metadata', sa.JSON(), nullable=True),
         sa.Column('created_by', sa.Uuid(), nullable=False),
         sa.Column('updated_by', sa.Uuid(), nullable=True),
-        sa.Column('deployed_at', sa.DateTime(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),

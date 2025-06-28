@@ -69,7 +69,6 @@ interface ScenarioMetrics {
   active_scenarios: number
   inactive_scenarios: number
   testing_scenarios: number
-  deployed_scenarios: number
 }
 
 interface ErrorLog {
@@ -117,7 +116,6 @@ export default function SystemMonitoringPage() {
     active_scenarios: 12,
     inactive_scenarios: 2,
     testing_scenarios: 1,
-    deployed_scenarios: 11
   })
   
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([
@@ -416,8 +414,6 @@ export default function SystemMonitoringPage() {
             <div className="text-2xl font-bold text-green-600">{scenarioMetrics.active_scenarios}개</div>
             <div className="flex items-center text-xs text-muted-foreground mt-1">
               <span>전체: {scenarioMetrics.total_scenarios}개</span>
-              <span className="mx-2">•</span>
-              <span>배포됨: {scenarioMetrics.deployed_scenarios}개</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               <TrendingUp className="inline h-3 w-3 mr-1" />

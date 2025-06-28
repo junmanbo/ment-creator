@@ -78,7 +78,6 @@ interface Scenario {
   is_template: boolean
   created_by: string
   updated_by?: string
-  deployed_at?: string
   created_at: string
   updated_at: string
   scenario_metadata?: Record<string, any>

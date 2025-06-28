@@ -106,11 +106,6 @@ const menuItems: MenuItem[] = [
         icon: BarChart3,
       },
       {
-        title: "배포 관리",
-        href: "/monitoring/deployment",
-        icon: Activity,
-      },
-      {
         title: "로그 관리",
         href: "/monitoring/logs",
         icon: FileText,
