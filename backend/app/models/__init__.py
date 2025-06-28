@@ -24,11 +24,6 @@ from .scenario_tts import (
     ScenarioTTS, ScenarioTTSCreate, ScenarioTTSUpdate, ScenarioTTSPublic,
     ScenarioTTSStatus
 )
-from .deployment import (
-    Deployment, DeploymentCreate, DeploymentUpdate, DeploymentPublic,
-    DeploymentHistory, DeploymentApproval, ApprovalRecord,
-    DeploymentEnvironment, DeploymentStatus
-)
 
 __all__ = [
     # Users
@@ -55,8 +50,4 @@ __all__ = [
     # Scenario TTS
     "ScenarioTTS", "ScenarioTTSCreate", "ScenarioTTSUpdate", "ScenarioTTSPublic",
     "ScenarioTTSStatus",
-    # Deployment
-    "Deployment", "DeploymentCreate", "DeploymentUpdate", "DeploymentPublic",
-    "DeploymentHistory", "DeploymentApproval", "ApprovalRecord",
-    "DeploymentEnvironment", "DeploymentStatus",
 ]
