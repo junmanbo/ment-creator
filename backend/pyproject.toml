@@ -35,6 +35,7 @@ dependencies = [
     # 오디오 전처리용
     "noisereduce>=3.0.0",
     "pyloudnorm>=0.1.1",
+    "aiohttp>=3.12.13",
 ]
 
 [build-system]

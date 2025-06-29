@@ -39,7 +39,6 @@ from app.models.tts import (
     TTSScriptPublic,
     TTSGeneration,
     TTSGenerateRequest,
-    TTSMultipleGenerateRequest,
     TTSGenerationPublic,
     TTSLibrary,
     TTSLibraryCreate,
@@ -585,87 +584,6 @@ async def generate_tts(
         )
 
 
-@router.post(
-    "/tts-scripts/{script_id}/generate-multiple", response_model=TTSGenerationPublic
-)
-async def generate_multiple_tts_versions(
-    *,
-    session: SessionDep,
-    script_id: uuid.UUID,
-    generate_request: TTSMultipleGenerateRequest,
-    current_user: CurrentUser,
-    background_tasks: BackgroundTasks,
-) -> TTSGenerationPublic:
-    """다중 버전 TTS 생성 요청 (여러 파라미터 조합으로 음성 파일 생성)"""
-    # 스크립트 확인
-    script = session.get(TTSScript, script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="스크립트를 찾을 수 없습니다.")
-
-    # 프리셋 검증
-    from app.services.tts_service import KOREAN_TTS_PRESETS
-
-    if generate_request.presets:
-        invalid_presets = [
-            p for p in generate_request.presets if p not in KOREAN_TTS_PRESETS
-        ]
-        if invalid_presets:
-            available_presets = list(KOREAN_TTS_PRESETS.keys())
-            raise HTTPException(
-                status_code=400,
-                detail=f"잘못된 프리셋: {invalid_presets}. 사용 가능한 프리셋: {available_presets}",
-            )
-        presets = generate_request.presets
-    else:
-        # 기본 프리셋: 가장 많이 사용되는 3종
-        presets = ["natural", "professional", "warm"]
-
-    logger.info(f"🎭 다중 버전 TTS 생성 요청 - 스크립트 ID: {script_id}")
-    logger.info(f"📝 텍스트: '{script.text_content[:50]}...'")
-    logger.info(f"🎯 선택된 프리셋: {presets}")
-
-    # 다중 버전 생성 작업 생성
-    generation = TTSGeneration(
-        script_id=script_id,
-        generation_params={
-            "multiple_versions": True,
-            "requested_presets": presets,
-            "quality": "high",
-            **(generate_request.generation_params or {}),
-        },
-        requested_by=current_user.id,
-    )
-
-    session.add(generation)
-    session.commit()
-    session.refresh(generation)
-
-    # 🔄 팩토리에서 현재 TTS 서비스 가져오기
-    tts_service = get_tts_service()
-
-    # 백그라운드에서 다중 버전 TTS 생성 처리
-    async def multiple_tts_generation_wrapper():
-        try:
-            await tts_service.process_multiple_tts_generation(generation.id, presets)
-        except Exception as e:
-            logger.error(f"🚨 다중 버전 백그라운드 TTS 작업 래퍼에서 예외 발생: {e}")
-            logger.error(f"🚨 예외 타입: {type(e).__name__}")
-            import traceback
-
-            logger.error(f"🚨 스택 트레이스: {traceback.format_exc()}")
-
-    background_tasks.add_task(multiple_tts_generation_wrapper)
-
-    try:
-        return TTSGenerationPublic.model_validate(generation)
-    except Exception as e:
-        logger.error(
-            f"❌ Failed to convert multiple TTS generation {generation.id}: {e}"
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="다중 버전 TTS 생성 데이터 변환 중 오류가 발생했습니다.",
-        )
 
 
 @router.post("/tts-scripts/batch-generate")
@@ -1548,89 +1466,6 @@ async def generate_test_tts(
         }
 
 
-@router.get("/tts-presets")
-async def get_tts_presets(*, current_user: CurrentUser):
-    """사용 가능한 TTS 파라미터 프리셋 조회"""
-    from app.services.tts_service import KOREAN_TTS_PRESETS
-
-    logger.info(f"🎭 TTS 프리셋 조회 요청 - 사용자: {current_user.id}")
-
-    try:
-        # 프리셋 정보를 더 사용자 친화적인 형태로 변환
-        presets_info = {}
-        for preset_key, preset_data in KOREAN_TTS_PRESETS.items():
-            presets_info[preset_key] = {
-                "name": preset_data["name"],
-                "description": preset_data["description"],
-                "parameters": {
-                    "temperature": preset_data["temperature"],
-                    "repetition_penalty": preset_data["repetition_penalty"],
-                    "top_k": preset_data["top_k"],
-                    "top_p": preset_data["top_p"],
-                    "length_penalty": preset_data["length_penalty"],
-                },
-                "recommended_for": _get_preset_recommendations(preset_key),
-            }
-
-        return {
-            "message": "TTS 프리셋 조회 완료",
-            "timestamp": datetime.now().isoformat(),
-            "total_presets": len(presets_info),
-            "presets": presets_info,
-            "usage": {
-                "default_presets": ["natural", "professional", "warm"],
-                "example_request": {
-                    "presets": ["natural", "professional"],
-                    "description": "자연스러운 음성과 전문적인 음성 2가지 버전 생성",
-                },
-            },
-        }
-
-    except Exception as e:
-        logger.error(f"❌ TTS 프리셋 조회 실패: {e}")
-        return {
-            "message": "TTS 프리셋 조회 실패",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e),
-            "error_type": type(e).__name__,
-        }
-
-
-def _get_preset_recommendations(preset_key: str) -> List[str]:
-    """프리셋별 추천 사용 상황"""
-    recommendations = {
-        "natural": [
-            "일반적인 안내 멘트",
-            "친근한 고객 응대",
-            "일상적인 대화",
-        ],
-        "professional": [
-            "공식적인 업무 안내",
-            "기업 홍보",
-            "정확한 정보 전달",
-        ],
-        "warm": [
-            "고객 서비스",
-            "감사 인사",
-            "친근한 환영 메시지",
-        ],
-        "clear": [
-            "중요한 안내사항",
-            "긴급 공지",
-            "명확한 지시사항",
-        ],
-        "gentle": [
-            "위로의 메시지",
-            "차분한 안내",
-            "부드러운 설명",
-        ],
-        "energetic": [
-            "홍보 및 광고",
-            "이벤트 안내",
-            "활기찬 환영 메시지",
-        ],
-    }
-    return recommendations.get(preset_key, ["일반적인 용도"])
 
 
 @router.get("/tts-status")
