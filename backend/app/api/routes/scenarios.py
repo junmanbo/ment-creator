@@ -170,12 +170,8 @@ def create_scenario_node(
     if existing_node:
         raise HTTPException(status_code=400, detail="동일한 node_id가 이미 존재합니다.")
     
-    # node_type을 소문자로 변환 (프론트엔드에서 대문자로 올 수 있음)
-    node_data = node_in.model_dump()
-    if "node_type" in node_data and isinstance(node_data["node_type"], str):
-        node_data["node_type"] = node_data["node_type"].lower()
-    
-    node = ScenarioNode(**node_data)
+    # Pydantic validator가 node_type을 자동으로 소문자로 변환
+    node = ScenarioNode(**node_in.model_dump())
     session.add(node)
     session.commit()
     session.refresh(node)
@@ -217,9 +213,7 @@ def update_scenario_node(
     
     update_data = node_in.model_dump(exclude_unset=True)
     if update_data:
-        # node_type을 소문자로 변환 (프론트엔드에서 대문자로 올 수 있음)
-        if "node_type" in update_data and isinstance(update_data["node_type"], str):
-            update_data["node_type"] = update_data["node_type"].lower()
+        # Pydantic validator가 node_type을 자동으로 소문자로 변환
         update_data["updated_at"] = datetime.now()
         node.sqlmodel_update(update_data)
     

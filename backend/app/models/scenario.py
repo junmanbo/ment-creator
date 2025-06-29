@@ -5,6 +5,7 @@ from sqlmodel import Field, SQLModel, Relationship, Column
 from sqlalchemy import JSON
 from enum import Enum
 from typing import Union, Literal
+from pydantic import validator
 
 class ScenarioStatus(str, Enum):
     DRAFT = "draft"
@@ -249,6 +250,13 @@ class ScenarioNodeBase(SQLModel):
 
 class ScenarioNodeCreate(ScenarioNodeBase):
     scenario_id: uuid.UUID
+    
+    @validator('node_type', pre=True)
+    def normalize_node_type(cls, v):
+        """node_type을 소문자로 변환 (대소문자 무관하게 처리)"""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 class ScenarioNodeUpdate(ScenarioNodeBase):
     node_id: Optional[str] = None
@@ -257,6 +265,13 @@ class ScenarioNodeUpdate(ScenarioNodeBase):
     position_x: Optional[float] = None
     position_y: Optional[float] = None
     config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    
+    @validator('node_type', pre=True)
+    def normalize_node_type(cls, v):
+        """node_type을 소문자로 변환 (대소문자 무관하게 처리)"""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 class ScenarioNode(ScenarioNodeBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
