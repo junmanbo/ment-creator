@@ -64,6 +64,20 @@ import {
   HelpCircle
 } from "lucide-react"
 
+// Handle 스타일 상수
+const HANDLE_STYLE = {
+  width: 12,
+  height: 12,
+  border: '2px solid',
+}
+
+const getHandleStyle = (color: string, position: 'top' | 'bottom') => ({
+  ...HANDLE_STYLE,
+  background: color,
+  borderColor: color,
+  [position]: -6,
+})
+
 // 노드 타입 정의
 interface ScenarioNode extends Node {
   data: {
@@ -93,12 +107,7 @@ const StartNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="source"
       position={Position.Bottom}
-      style={{
-        background: '#22c55e',
-        width: 8,
-        height: 8,
-        bottom: -4,
-      }}
+      style={getHandleStyle('#22c55e', 'bottom')}
     />
   </div>
 )
@@ -109,12 +118,7 @@ const MessageNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#3b82f6',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#3b82f6', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -129,12 +133,7 @@ const MessageNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="source"
       position={Position.Bottom}
-      style={{
-        background: '#3b82f6',
-        width: 8,
-        height: 8,
-        bottom: -4,
-      }}
+      style={getHandleStyle('#3b82f6', 'bottom')}
     />
   </div>
 )
@@ -145,12 +144,7 @@ const BranchNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#eab308',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#eab308', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -164,10 +158,7 @@ const BranchNode = ({ data, selected }: { data: any; selected: boolean }) => (
       position={Position.Bottom}
       id="option-1"
       style={{
-        background: '#eab308',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#eab308', 'bottom'),
         left: '25%',
       }}
     />
@@ -176,10 +167,7 @@ const BranchNode = ({ data, selected }: { data: any; selected: boolean }) => (
       position={Position.Bottom}
       id="option-2"
       style={{
-        background: '#eab308',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#eab308', 'bottom'),
         left: '50%',
       }}
     />
@@ -188,10 +176,7 @@ const BranchNode = ({ data, selected }: { data: any; selected: boolean }) => (
       position={Position.Bottom}
       id="option-3"
       style={{
-        background: '#eab308',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#eab308', 'bottom'),
         left: '75%',
       }}
     />
@@ -204,12 +189,7 @@ const TransferNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#a855f7',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#a855f7', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -221,12 +201,7 @@ const TransferNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="source"
       position={Position.Bottom}
-      style={{
-        background: '#a855f7',
-        width: 8,
-        height: 8,
-        bottom: -4,
-      }}
+      style={getHandleStyle('#a855f7', 'bottom')}
     />
   </div>
 )
@@ -237,12 +212,7 @@ const EndNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#ef4444',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#ef4444', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -258,12 +228,7 @@ const InputNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#6b7280',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#6b7280', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -275,12 +240,7 @@ const InputNode = ({ data, selected }: { data: any; selected: boolean }) => (
     <Handle
       type="source"
       position={Position.Bottom}
-      style={{
-        background: '#6b7280',
-        width: 8,
-        height: 8,
-        bottom: -4,
-      }}
+      style={getHandleStyle('#6b7280', 'bottom')}
     />
   </div>
 )
@@ -291,12 +251,7 @@ const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => 
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#f97316',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#f97316', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -313,10 +268,7 @@ const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => 
       position={Position.Bottom}
       id="true"
       style={{
-        background: '#f97316',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#f97316', 'bottom'),
         left: '30%',
       }}
     />
@@ -325,10 +277,7 @@ const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => 
       position={Position.Bottom}
       id="false"
       style={{
-        background: '#f97316',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#f97316', 'bottom'),
         left: '70%',
       }}
     />
@@ -340,12 +289,7 @@ const VoiceMentNode = ({ data, selected }: { data: any; selected: boolean }) => 
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#6366f1',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#6366f1', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -359,12 +303,7 @@ const VoiceMentNode = ({ data, selected }: { data: any; selected: boolean }) => 
     <Handle
       type="source"
       position={Position.Bottom}
-      style={{
-        background: '#6366f1',
-        width: 8,
-        height: 8,
-        bottom: -4,
-      }}
+      style={getHandleStyle('#6366f1', 'bottom')}
     />
   </div>
 )
@@ -374,12 +313,7 @@ const MenuSelectNode = ({ data, selected }: { data: any; selected: boolean }) =>
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#10b981',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#10b981', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -396,10 +330,7 @@ const MenuSelectNode = ({ data, selected }: { data: any; selected: boolean }) =>
       position={Position.Bottom}
       id="menu-1"
       style={{
-        background: '#10b981',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#10b981', 'bottom'),
         left: '20%',
       }}
     />
@@ -408,10 +339,7 @@ const MenuSelectNode = ({ data, selected }: { data: any; selected: boolean }) =>
       position={Position.Bottom}
       id="menu-2"
       style={{
-        background: '#10b981',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#10b981', 'bottom'),
         left: '40%',
       }}
     />
@@ -420,10 +348,7 @@ const MenuSelectNode = ({ data, selected }: { data: any; selected: boolean }) =>
       position={Position.Bottom}
       id="menu-3"
       style={{
-        background: '#10b981',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#10b981', 'bottom'),
         left: '60%',
       }}
     />
@@ -432,10 +357,7 @@ const MenuSelectNode = ({ data, selected }: { data: any; selected: boolean }) =>
       position={Position.Bottom}
       id="menu-4"
       style={{
-        background: '#10b981',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#10b981', 'bottom'),
         left: '80%',
       }}
     />
@@ -447,12 +369,7 @@ const InputCollectNode = ({ data, selected }: { data: any; selected: boolean }) 
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#14b8a6',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#14b8a6', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -466,12 +383,7 @@ const InputCollectNode = ({ data, selected }: { data: any; selected: boolean }) 
     <Handle
       type="source"
       position={Position.Bottom}
-      style={{
-        background: '#14b8a6',
-        width: 8,
-        height: 8,
-        bottom: -4,
-      }}
+      style={getHandleStyle('#14b8a6', 'bottom')}
     />
   </div>
 )
@@ -481,12 +393,7 @@ const ExternalApiNode = ({ data, selected }: { data: any; selected: boolean }) =
     <Handle
       type="target"
       position={Position.Top}
-      style={{
-        background: '#06b6d4',
-        width: 8,
-        height: 8,
-        top: -4,
-      }}
+      style={getHandleStyle('#06b6d4', 'top')}
     />
     
     <div className="flex items-center space-x-2">
@@ -503,10 +410,7 @@ const ExternalApiNode = ({ data, selected }: { data: any; selected: boolean }) =
       position={Position.Bottom}
       id="success"
       style={{
-        background: '#06b6d4',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#06b6d4', 'bottom'),
         left: '30%',
       }}
     />
@@ -515,10 +419,7 @@ const ExternalApiNode = ({ data, selected }: { data: any; selected: boolean }) =
       position={Position.Bottom}
       id="error"
       style={{
-        background: '#06b6d4',
-        width: 8,
-        height: 8,
-        bottom: -4,
+        ...getHandleStyle('#06b6d4', 'bottom'),
         left: '70%',
       }}
     />
@@ -1642,6 +1543,7 @@ function ScenarioEditPageContent() {
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
             connectionMode={ConnectionMode.Loose}
+            connectionRadius={20}
             fitView
             attributionPosition="top-right"
             connectionLineStyle={{ strokeWidth: 2, stroke: '#555' }}
@@ -1650,6 +1552,10 @@ function ScenarioEditPageContent() {
               type: 'smoothstep',
               markerEnd: { type: MarkerType.ArrowClosed, color: '#555' },
             }}
+            minZoom={0.2}
+            maxZoom={4}
+            snapToGrid={true}
+            snapGrid={[15, 15]}
           >
             <Background color="#f0f0f0" gap={20} />
             <Controls />
