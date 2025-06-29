@@ -13,7 +13,9 @@ from app.models.scenario import (
     ScenarioVersion, ScenarioVersionCreate, ScenarioVersionUpdate, ScenarioVersionPublic,
     ScenarioSimulation, ScenarioSimulationCreate, ScenarioSimulationPublic,
     ScenarioStatus, NodeType, VersionDiff, VersionRollbackRequest, VersionMergeRequest,
-    VersionStatus
+    VersionStatus, ConditionType, InputCollectType, ExternalApiType,
+    VoiceMentConfig, ConditionConfig, MenuSelectConfig, InputCollectConfig,
+    ExternalApiConfig, TransferConfig
 )
 from app.services.scenario_version_service import ScenarioVersionService
 
