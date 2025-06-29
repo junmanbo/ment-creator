@@ -56,14 +56,21 @@ import {
   ToggleRight,
   Eye,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Settings,
+  Volume2,
+  Database,
+  Calendar,
+  HelpCircle
 } from "lucide-react"
 
 // 노드 타입 정의
 interface ScenarioNode extends Node {
   data: {
     label: string
-    nodeType: "start" | "message" | "branch" | "transfer" | "end" | "input"
+    nodeType: "start" | "end" | "condition" | "voice_ment" | "menu_select" | 
+               "input_collect" | "external_api" | "transfer" | 
+               "message" | "branch" | "input" // Legacy types
     config: any
   }
 }
@@ -278,13 +285,263 @@ const InputNode = ({ data, selected }: { data: any; selected: boolean }) => (
   </div>
 )
 
+// 새로운 ARS 노드 컴포넌트들
+const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => (
+  <div className={`px-4 py-2 shadow-md rounded-md bg-orange-100 border-2 ${selected ? 'border-orange-500' : 'border-orange-300'}`}>
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#f97316',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
+    <div className="flex items-center space-x-2">
+      <Settings className="h-4 w-4 text-orange-600" />
+      <span className="text-sm font-medium">{data.label || "조건 분기"}</span>
+    </div>
+    {data.config?.condition_type && (
+      <p className="text-xs text-gray-600 mt-1">{data.config.condition_type}</p>
+    )}
+    
+    {/* 다중 출력 핸들 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="true"
+      style={{
+        background: '#f97316',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '30%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="false"
+      style={{
+        background: '#f97316',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '70%',
+      }}
+    />
+  </div>
+)
+
+const VoiceMentNode = ({ data, selected }: { data: any; selected: boolean }) => (
+  <div className={`px-4 py-2 shadow-md rounded-md bg-indigo-100 border-2 ${selected ? 'border-indigo-500' : 'border-indigo-300'} min-w-[150px]`}>
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#6366f1',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
+    <div className="flex items-center space-x-2">
+      <Volume2 className="h-4 w-4 text-indigo-600" />
+      <span className="text-sm font-medium">{data.label || "음성 멘트"}</span>
+    </div>
+    {data.config?.text_content && (
+      <p className="text-xs text-gray-600 mt-1 truncate">{data.config.text_content.substring(0, 30)}...</p>
+    )}
+    
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#6366f1',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
+  </div>
+)
+
+const MenuSelectNode = ({ data, selected }: { data: any; selected: boolean }) => (
+  <div className={`px-4 py-2 shadow-md rounded-md bg-emerald-100 border-2 ${selected ? 'border-emerald-500' : 'border-emerald-300'}`}>
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#10b981',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
+    <div className="flex items-center space-x-2">
+      <HelpCircle className="h-4 w-4 text-emerald-600" />
+      <span className="text-sm font-medium">{data.label || "메뉴 선택"}</span>
+    </div>
+    {data.config?.menu_items && (
+      <p className="text-xs text-gray-600 mt-1">{data.config.menu_items.length}개 옵션</p>
+    )}
+    
+    {/* 다중 출력 핸들 (메뉴 옵션들) */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="menu-1"
+      style={{
+        background: '#10b981',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '20%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="menu-2"
+      style={{
+        background: '#10b981',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '40%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="menu-3"
+      style={{
+        background: '#10b981',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '60%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="menu-4"
+      style={{
+        background: '#10b981',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '80%',
+      }}
+    />
+  </div>
+)
+
+const InputCollectNode = ({ data, selected }: { data: any; selected: boolean }) => (
+  <div className={`px-4 py-2 shadow-md rounded-md bg-teal-100 border-2 ${selected ? 'border-teal-500' : 'border-teal-300'}`}>
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#14b8a6',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
+    <div className="flex items-center space-x-2">
+      <Database className="h-4 w-4 text-teal-600" />
+      <span className="text-sm font-medium">{data.label || "입력 수집"}</span>
+    </div>
+    {data.config?.input_type && (
+      <p className="text-xs text-gray-600 mt-1">{data.config.input_type}</p>
+    )}
+    
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{
+        background: '#14b8a6',
+        width: 8,
+        height: 8,
+        bottom: -4,
+      }}
+    />
+  </div>
+)
+
+const ExternalApiNode = ({ data, selected }: { data: any; selected: boolean }) => (
+  <div className={`px-4 py-2 shadow-md rounded-md bg-cyan-100 border-2 ${selected ? 'border-cyan-500' : 'border-cyan-300'}`}>
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#06b6d4',
+        width: 8,
+        height: 8,
+        top: -4,
+      }}
+    />
+    
+    <div className="flex items-center space-x-2">
+      <Database className="h-4 w-4 text-cyan-600" />
+      <span className="text-sm font-medium">{data.label || "외부 API"}</span>
+    </div>
+    {data.config?.endpoint_name && (
+      <p className="text-xs text-gray-600 mt-1">{data.config.endpoint_name}</p>
+    )}
+    
+    {/* 성공/실패 분기 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="success"
+      style={{
+        background: '#06b6d4',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '30%',
+      }}
+    />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="error"
+      style={{
+        background: '#06b6d4',
+        width: 8,
+        height: 8,
+        bottom: -4,
+        left: '70%',
+      }}
+    />
+  </div>
+)
+
 // 커스텀 노드 타입 등록
 const nodeTypes: NodeTypes = {
+  // 기본 노드들
   start: StartNode,
+  end: EndNode,
+  
+  // 새로운 ARS 노드들
+  condition: ConditionNode,
+  voice_ment: VoiceMentNode,
+  menu_select: MenuSelectNode,
+  input_collect: InputCollectNode,
+  external_api: ExternalApiNode,
+  transfer: TransferNode,
+  
+  // 레거시 노드들 (호환성)
   message: MessageNode,
   branch: BranchNode,
-  transfer: TransferNode,
-  end: EndNode,
   input: InputNode,
 }
 
@@ -784,12 +1041,23 @@ function ScenarioEditPageContent() {
 
   const getNodeLabel = (nodeType: string) => {
     switch (nodeType) {
+      // 기본 노드
       case "start": return "시작"
+      case "end": return "종료"
+      
+      // 새로운 ARS 노드
+      case "condition": return "조건 분기"
+      case "voice_ment": return "음성 멘트"
+      case "menu_select": return "메뉴 선택"
+      case "input_collect": return "입력 수집"
+      case "external_api": return "외부 API"
+      case "transfer": return "상담원 연결"
+      
+      // 레거시 노드 (호환성)
       case "message": return "메시지"
       case "branch": return "분기"
-      case "transfer": return "상담원"
-      case "end": return "종료"
       case "input": return "입력"
+      
       default: return "노드"
     }
   }
@@ -1232,25 +1500,74 @@ function ScenarioEditPageContent() {
           {/* 노드 팔레트 */}
           <div className="p-4 border-b">
             <h3 className="font-medium mb-4">노드 팔레트</h3>
-            <div className="space-y-2">
-              {[
-                { type: "start", label: "시작", icon: Phone, color: "green" },
-                { type: "message", label: "메시지", icon: MessageSquare, color: "blue" },
-                { type: "branch", label: "분기", icon: GitBranch, color: "yellow" },
-                { type: "transfer", label: "상담원", icon: PhoneCall, color: "purple" },
-                { type: "input", label: "입력", icon: Mic, color: "gray" },
-                { type: "end", label: "종료", icon: Square, color: "red" },
-              ].map((nodeType) => (
-                <Button
-                  key={nodeType.type}
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => addNode(nodeType.type)}
-                >
-                  <nodeType.icon className="h-4 w-4 mr-2" />
-                  {nodeType.label}
-                </Button>
-              ))}
+            <div className="space-y-3">
+              {/* 기본 노드 */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">기본 노드</h4>
+                <div className="space-y-1">
+                  {[
+                    { type: "start", label: "시작", icon: Phone, color: "green" },
+                    { type: "end", label: "종료", icon: Square, color: "red" },
+                  ].map((nodeType) => (
+                    <Button
+                      key={nodeType.type}
+                      variant="outline"
+                      className="w-full justify-start text-xs h-8"
+                      onClick={() => addNode(nodeType.type)}
+                    >
+                      <nodeType.icon className="h-3 w-3 mr-2" />
+                      {nodeType.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ARS 전용 노드 */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">ARS 노드</h4>
+                <div className="space-y-1">
+                  {[
+                    { type: "condition", label: "조건 분기", icon: Settings, color: "orange" },
+                    { type: "voice_ment", label: "음성 멘트", icon: Volume2, color: "indigo" },
+                    { type: "menu_select", label: "메뉴 선택", icon: HelpCircle, color: "emerald" },
+                    { type: "input_collect", label: "입력 수집", icon: Database, color: "teal" },
+                    { type: "external_api", label: "외부 API", icon: Database, color: "cyan" },
+                    { type: "transfer", label: "상담원 연결", icon: PhoneCall, color: "purple" },
+                  ].map((nodeType) => (
+                    <Button
+                      key={nodeType.type}
+                      variant="outline"
+                      className="w-full justify-start text-xs h-8"
+                      onClick={() => addNode(nodeType.type)}
+                    >
+                      <nodeType.icon className="h-3 w-3 mr-2" />
+                      {nodeType.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 레거시 노드 (호환성) */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-500 mb-2">레거시 (호환성)</h4>
+                <div className="space-y-1">
+                  {[
+                    { type: "message", label: "메시지", icon: MessageSquare, color: "blue" },
+                    { type: "branch", label: "분기", icon: GitBranch, color: "yellow" },
+                    { type: "input", label: "입력", icon: Mic, color: "gray" },
+                  ].map((nodeType) => (
+                    <Button
+                      key={nodeType.type}
+                      variant="outline"
+                      className="w-full justify-start text-xs h-8 text-gray-500"
+                      onClick={() => addNode(nodeType.type)}
+                    >
+                      <nodeType.icon className="h-3 w-3 mr-2" />
+                      {nodeType.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
