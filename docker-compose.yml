@@ -1,5 +1,38 @@
 services:
 
+  fish-speech-tts:
+    image: ${IMAGE_NAME}
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
+      - FISH_SPEECH_DEVICE=${FISH_SPEECH_DEVICE}
+      - FISH_SPEECH_MODEL_PATH=${FISH_SPEECH_MODEL_PATH}
+      - PYTHONPATH=${PYTHONPATH}
+      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED}
+      - TORCH_HOME=${TORCH_HOME}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - "${FISH_SPEECH_API_PORT}:8080"
+    volumes:
+      - ./backend/voice_samples:/workspace/voice_samples
+      - ./backend/audio_files:/workspace/audio_files
+      - ./backend/temp_processing:/workspace/temp_processing
+      - ./fish-speech/checkpoint:/opt/fish-speech/checkpoint
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   db:
     image: postgres:17
     restart: always

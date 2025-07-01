@@ -15,7 +15,7 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-    domains: ['localhost'],
+    domains: ['localhost', '192.168.0.75'],
   },
   experimental: {
     webpackBuildWorker: true,
@@ -27,7 +27,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/v1/:path*',
+        destination: 'http://192.168.0.75:8000/api/v1/:path*',
       },
     ]
   },

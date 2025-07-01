@@ -57,7 +57,9 @@ export default function LoginPage() {
 
     setIsLoading(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/login/access-token`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'
+      console.log('API URL:', apiUrl) // 디버깅용
+      const response = await fetch(`${apiUrl}/login/access-token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
