@@ -104,7 +104,7 @@ export default function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
             <div className="flex items-center justify-center w-10 h-10">
               <Image 
                 src="/hanwha-logo.png" 
-                alt="한화손해보험 로고" 
+                alt="한화시스템 로고" 
                 width={40} 
                 height={40}
                 className="w-10 h-10"
@@ -112,7 +112,7 @@ export default function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
             </div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-bold text-gray-900">
-                한화손해보험 ARS 관리
+                한화시스템 ARS 관리
               </h1>
               <p className="text-xs text-gray-500">콜센터 시나리오 관리 시스템</p>
             </div>

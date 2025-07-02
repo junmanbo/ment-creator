@@ -134,7 +134,7 @@ export default function LoginPage() {
               <div className="w-24 h-24 flex items-center justify-center">
                 <Image 
                   src="/hanwha-logo.png" 
-                  alt="한화손해보험 로고" 
+                  alt="한화시스템 로고" 
                   width={96} 
                   height={96}
                   className="w-24 h-24 drop-shadow-lg"
@@ -145,7 +145,7 @@ export default function LoginPage() {
             {/* 시스템 제목 */}
             <div className="space-y-2">
               <h1 className="text-2xl font-bold text-gray-900">
-                한화손해보험
+                한화시스템
               </h1>
               <h2 className="text-lg font-semibold text-gray-600">
                 ARS 시나리오 관리 시스템
@@ -245,7 +245,7 @@ export default function LoginPage() {
         <div className="max-w-7xl mx-auto py-4 px-4">
           <div className="text-center">
             <p className="text-sm text-gray-600">
-              © 2025 한화손해보험. All rights reserved.
+              © 2025 한화시스템. All rights reserved.
             </p>
             <p className="text-xs text-gray-500 mt-1">
               ARS 시나리오 관리 시스템 v2.1.0

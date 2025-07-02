@@ -8,8 +8,8 @@ import { MainLayout } from "@/components/layout"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "한화손해보험 ARS 관리 시스템",
-  description: "한화손해보험 콜센터 ARS 시나리오 및 TTS 멘트 관리 시스템",
+  title: "한화시스템 ARS 관리 시스템",
+  description: "한화시스템 콜센터 ARS 시나리오 및 TTS 멘트 관리 시스템",
 }
 
 export default function RootLayout({
