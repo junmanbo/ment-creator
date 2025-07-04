@@ -1,7 +1,7 @@
 """deleted voice actor models
 
 Revision ID: 0cc81e9f6eb0
-Revises: 0064f815f443
+Revises: d275b7deb242
 Create Date: 2025-06-08 21:53:24.200251
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '0cc81e9f6eb0'
-down_revision: Union[str, None] = '0064f815f443'
+down_revision: Union[str, None] = 'd275b7deb242'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
