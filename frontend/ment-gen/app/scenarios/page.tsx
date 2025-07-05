@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -108,6 +108,7 @@ interface ScenariosResponse {
 
 export default function ScenariosPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
@@ -132,6 +133,14 @@ export default function ScenariosPage() {
   })
   
   const { toast } = useToast()
+
+  // Check if should auto-open create dialog
+  useEffect(() => {
+    const shouldOpenCreate = searchParams.get('create') === 'simple'
+    if (shouldOpenCreate) {
+      setIsCreateDialogOpen(true)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     fetchScenarios()
@@ -472,16 +481,6 @@ export default function ScenariosPage() {
           <Button variant="outline" onClick={fetchScenarios} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             새로고침
-          </Button>
-          
-          {/* 플로우차트 에디터로 바로 이동 */}
-          <Button 
-            size="lg" 
-            onClick={() => router.push("/scenarios/create")}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            플로우차트로 생성
           </Button>
           
           {/* 간단 생성 다이얼로그 */}

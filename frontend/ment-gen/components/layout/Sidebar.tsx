@@ -58,7 +58,7 @@ const menuItems: MenuItem[] = [
       },
       {
         title: "새 시나리오",
-        href: "/scenarios/create",
+        href: "/scenarios?create=simple",
         icon: FileText,
       },
 
