@@ -46,6 +46,7 @@ import {
   Square,
   Mic,
   Loader2,
+  Diamond,
   LayoutGrid,
   Workflow,
   Maximize,
@@ -63,7 +64,7 @@ import {
 interface ScenarioNode extends Node {
   data: {
     label: string
-    nodeType: "start" | "message" | "branch" | "transfer" | "end" | "input"
+    nodeType: "start" | "message" | "branch" | "transfer" | "end" | "input" | "condition"
     config: any
   }
 }
@@ -278,6 +279,83 @@ const InputNode = ({ data, selected }: { data: any; selected: boolean }) => (
   </div>
 )
 
+const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => (
+  <div className="relative" style={{ width: 100, height: 100 }}>
+    {/* 다이아몬드 모양 - CSS로 정사각형을 45도 회전 */}
+    <div 
+      className={`absolute shadow-md bg-orange-100 border-2 ${selected ? 'border-orange-500' : 'border-orange-300'}`}
+      style={{
+        width: 80,
+        height: 80,
+        left: 10,
+        top: 10,
+        transform: 'rotate(45deg)',
+        transformOrigin: 'center',
+      }}
+    />
+    
+    {/* 입력 핸들 - 다이아몬드 위쪽 꼭지점 */}
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{
+        background: '#f97316',
+        width: 10,
+        height: 10,
+        top: 0,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        border: '2px solid white',
+        borderRadius: '50%',
+      }}
+    />
+    
+    {/* 텍스트 */}
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div className="flex flex-col items-center text-center">
+        <Diamond className="h-4 w-4 mb-1 text-orange-600" />
+        <div className="text-orange-800 font-medium text-xs max-w-16 leading-tight">
+          {data.label}
+        </div>
+      </div>
+    </div>
+    
+    {/* YES 출력 핸들 - 다이아몬드 아래쪽 꼭지점 */}
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      id="yes"
+      style={{
+        background: '#22c55e',
+        width: 10,
+        height: 10,
+        bottom: 0,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        border: '2px solid white',
+        borderRadius: '50%',
+      }}
+    />
+    
+    {/* NO 출력 핸들 - 다이아몬드 오른쪽 꼭지점 */}
+    <Handle
+      type="source"
+      position={Position.Right}
+      id="no"
+      style={{
+        background: '#ef4444',
+        width: 10,
+        height: 10,
+        right: 0,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        border: '2px solid white',
+        borderRadius: '50%',
+      }}
+    />
+  </div>
+)
+
 // 커스텀 노드 타입 등록
 const nodeTypes: NodeTypes = {
   start: StartNode,
@@ -286,6 +364,7 @@ const nodeTypes: NodeTypes = {
   transfer: TransferNode,
   end: EndNode,
   input: InputNode,
+  condition: ConditionNode,
 }
 
 interface Scenario {
@@ -787,6 +866,7 @@ function ScenarioEditPageContent() {
       case "start": return "시작"
       case "message": return "메시지"
       case "branch": return "분기"
+      case "condition": return "조건"
       case "transfer": return "상담원"
       case "end": return "종료"
       case "input": return "입력"
@@ -1237,6 +1317,7 @@ function ScenarioEditPageContent() {
                 { type: "start", label: "시작", icon: Phone, color: "green" },
                 { type: "message", label: "메시지", icon: MessageSquare, color: "blue" },
                 { type: "branch", label: "분기", icon: GitBranch, color: "yellow" },
+                { type: "condition", label: "조건", icon: Diamond, color: "orange" },
                 { type: "transfer", label: "상담원", icon: PhoneCall, color: "purple" },
                 { type: "input", label: "입력", icon: Mic, color: "gray" },
                 { type: "end", label: "종료", icon: Square, color: "red" },

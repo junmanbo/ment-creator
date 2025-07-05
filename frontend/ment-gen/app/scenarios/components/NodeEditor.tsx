@@ -100,7 +100,6 @@ export default function NodeEditor({
       return
     }
 
-    // 시나리오 ID 가져오기 (상위 컴포넌트에서 전달받아야 함)
     const scenarioId = selectedNode?.data?.scenarioId
     if (!scenarioId) {
       toast({
@@ -115,7 +114,6 @@ export default function NodeEditor({
     try {
       const accessToken = localStorage.getItem("access_token")
       
-      // 시나리오 전용 TTS 생성 API 사용
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenario-tts/scenario/${scenarioId}/node/${selectedNode.id}/generate`,
         {
@@ -137,7 +135,6 @@ export default function NodeEditor({
       if (response.ok) {
         const result = await response.json()
         
-        // 노드에 시나리오 TTS ID와 생성 ID 저장
         onUpdateConfig("scenario_tts_id", result.scenario_tts_id)
         onUpdateConfig("tts_generation_id", result.generation_id)
         
@@ -146,7 +143,6 @@ export default function NodeEditor({
           description: "시나리오 전용 음성 생성이 시작되었습니다.",
         })
 
-        // 생성 상태 폴링
         pollTTSStatus(result.generation_id)
       } else {
         throw new Error("TTS 생성 요청 실패")
@@ -193,7 +189,6 @@ export default function NodeEditor({
               variant: "destructive",
             })
           } else if (generation.status === "processing" || generation.status === "pending") {
-            // 3초 후 다시 폴링
             setTimeout(poll, 3000)
           }
         }
@@ -318,23 +313,23 @@ export default function NodeEditor({
               <Label htmlFor="message-text">메시지 내용</Label>
               <Textarea
                 id="message-text"
-                value={selectedNode.data.config.text || ""}
+                value={selectedNode.data.config?.text || ""}
                 onChange={(e) => onUpdateConfig("text", e.target.value)}
-                placeholder="고객에게 전달할 메시지를 입력하세요"
-                rows={4}
+                placeholder="음성으로 변환할 텍스트를 입력하세요"
+                rows={3}
               />
             </div>
 
             <div>
               <Label htmlFor="voice-actor">성우 선택</Label>
               {isVoiceActorsLoading ? (
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-gray-500">성우 목록 로딩 중...</span>
+                <div className="flex items-center justify-center p-4">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  성우 목록 로딩중...
                 </div>
               ) : (
-                <Select 
-                  value={selectedNode.data.config.voice_actor_id || ""} 
+                <Select
+                  value={selectedNode.data.config?.voice_actor_id || ""}
                   onValueChange={(value) => onUpdateConfig("voice_actor_id", value)}
                 >
                   <SelectTrigger>
@@ -343,7 +338,7 @@ export default function NodeEditor({
                   <SelectContent>
                     {voiceActors.map((actor) => (
                       <SelectItem key={actor.id} value={actor.id}>
-                        {actor.name} ({actor.gender === "male" ? "남성" : actor.gender === "female" ? "여성" : "중성"}, {actor.age_range})
+                        {actor.name} ({actor.gender}, {actor.age_range})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -354,7 +349,7 @@ export default function NodeEditor({
             <div className="flex space-x-2">
               <Button 
                 onClick={generateTTS} 
-                disabled={isGeneratingTTS || !selectedNode.data.config.text || !selectedNode.data.config.voice_actor_id}
+                disabled={isGeneratingTTS || !selectedNode.data.config?.text || !selectedNode.data.config?.voice_actor_id}
                 className="flex-1"
               >
                 {isGeneratingTTS ? (
@@ -370,7 +365,7 @@ export default function NodeEditor({
                 )}
               </Button>
               
-              {selectedNode.data.config.audio_file_path && (
+              {selectedNode.data.config?.audio_file_path && (
                 <Button 
                   variant="outline" 
                   onClick={playAudio}
@@ -385,7 +380,7 @@ export default function NodeEditor({
               )}
             </div>
 
-            {selectedNode.data.config.audio_file_path && (
+            {selectedNode.data.config?.audio_file_path && (
               <div className="flex items-center space-x-2 text-sm text-green-600">
                 <Volume2 className="h-4 w-4" />
                 <span>음성 파일이 생성되었습니다</span>
@@ -401,45 +396,41 @@ export default function NodeEditor({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label>분기 옵션</Label>
-                <Button size="sm" onClick={addBranchOption}>
+                <Button 
+                  onClick={addBranchOption}
+                  size="sm"
+                  variant="outline"
+                >
                   <Plus className="h-4 w-4 mr-1" />
                   옵션 추가
                 </Button>
               </div>
-              <p className="text-sm text-gray-600 mb-3">
-                고객이 선택할 수 있는 옵션들을 설정하세요
-              </p>
               
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {branchOptions.map((option, index) => (
-                  <div key={index} className="flex items-center space-x-2 p-3 border rounded-lg">
-                    <Input
-                      value={option.key}
-                      onChange={(e) => updateBranchOption(index, "key", e.target.value)}
-                      placeholder="키"
-                      className="w-16"
-                    />
-                    <Input
-                      value={option.label}
-                      onChange={(e) => updateBranchOption(index, "label", e.target.value)}
-                      placeholder="옵션 레이블"
-                      className="flex-1"
-                    />
+                  <div key={index} className="flex space-x-2 items-center">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="키 (예: 1, 2, 9)"
+                        value={option.key}
+                        onChange={(e) => updateBranchOption(index, "key", e.target.value)}
+                        className="mb-1"
+                      />
+                      <Input
+                        placeholder="라벨 (예: 보험상담, 사고접수)"
+                        value={option.label}
+                        onChange={(e) => updateBranchOption(index, "label", e.target.value)}
+                      />
+                    </div>
                     <Button
+                      onClick={() => removeBranchOption(index)}
                       size="sm"
                       variant="outline"
-                      onClick={() => removeBranchOption(index)}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
-                
-                {branchOptions.length === 0 && (
-                  <p className="text-center text-gray-500 py-4">
-                    분기 옵션을 추가해주세요
-                  </p>
-                )}
               </div>
             </div>
           </>
@@ -452,7 +443,7 @@ export default function NodeEditor({
             <div>
               <Label htmlFor="transfer-type">연결 유형</Label>
               <Select 
-                value={selectedNode.data.config.transfer_type || "general"} 
+                value={selectedNode.data.config?.transfer_type || "general"} 
                 onValueChange={(value) => onUpdateConfig("transfer_type", value)}
               >
                 <SelectTrigger>
@@ -471,7 +462,7 @@ export default function NodeEditor({
               <Label htmlFor="transfer-message">연결 멘트</Label>
               <Textarea
                 id="transfer-message"
-                value={selectedNode.data.config.transfer_message || ""}
+                value={selectedNode.data.config?.transfer_message || ""}
                 onChange={(e) => onUpdateConfig("transfer_message", e.target.value)}
                 placeholder="상담원 연결 전 안내 멘트를 입력하세요"
                 rows={2}
@@ -487,7 +478,7 @@ export default function NodeEditor({
             <div>
               <Label htmlFor="input-type">입력 타입</Label>
               <Select 
-                value={selectedNode.data.config.input_type || "number"} 
+                value={selectedNode.data.config?.input_type || "number"} 
                 onValueChange={(value) => onUpdateConfig("input_type", value)}
               >
                 <SelectTrigger>
@@ -502,12 +493,12 @@ export default function NodeEditor({
             </div>
 
             <div>
-              <Label htmlFor="input-prompt">입력 안내 멘트</Label>
+              <Label htmlFor="input-prompt">입력 안내</Label>
               <Textarea
                 id="input-prompt"
-                value={selectedNode.data.config.input_prompt || ""}
+                value={selectedNode.data.config?.input_prompt || ""}
                 onChange={(e) => onUpdateConfig("input_prompt", e.target.value)}
-                placeholder="고객에게 입력을 안내하는 멘트를 입력하세요"
+                placeholder="사용자에게 입력을 요청하는 멘트를 입력하세요"
                 rows={2}
               />
             </div>
@@ -516,10 +507,78 @@ export default function NodeEditor({
               <Label htmlFor="input-validation">입력 검증</Label>
               <Input
                 id="input-validation"
-                value={selectedNode.data.config.input_validation || ""}
+                value={selectedNode.data.config?.input_validation || ""}
                 onChange={(e) => onUpdateConfig("input_validation", e.target.value)}
                 placeholder="입력 검증 규칙 (정규식 등)"
               />
+            </div>
+          </>
+        )}
+
+        {/* 조건 노드 설정 */}
+        {selectedNode.data.nodeType === "condition" && (
+          <>
+            <Separator />
+            <div>
+              <Label htmlFor="condition-type">조건 타입</Label>
+              <Select 
+                value={selectedNode.data.config?.condition_type || "user_input"} 
+                onValueChange={(value) => onUpdateConfig("condition_type", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user_input">사용자 입력</SelectItem>
+                  <SelectItem value="session_variable">세션 변수</SelectItem>
+                  <SelectItem value="time_based">시간 기반</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="condition-field">조건 필드</Label>
+              <Input
+                id="condition-field"
+                value={selectedNode.data.config?.condition_field || ""}
+                onChange={(e) => onUpdateConfig("condition_field", e.target.value)}
+                placeholder="예: user_input, age, time"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="condition-operator">조건 연산자</Label>
+              <Select 
+                value={selectedNode.data.config?.condition_operator || "equals"} 
+                onValueChange={(value) => onUpdateConfig("condition_operator", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="equals">같음 (=)</SelectItem>
+                  <SelectItem value="not_equals">다름 (!=)</SelectItem>
+                  <SelectItem value="greater_than">초과 (&gt;)</SelectItem>
+                  <SelectItem value="less_than">미만 (&lt;)</SelectItem>
+                  <SelectItem value="contains">포함</SelectItem>
+                  <SelectItem value="not_contains">미포함</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="condition-value">조건 값</Label>
+              <Input
+                id="condition-value"
+                value={selectedNode.data.config?.condition_value || ""}
+                onChange={(e) => onUpdateConfig("condition_value", e.target.value)}
+                placeholder="비교할 값"
+              />
+            </div>
+
+            <div className="text-sm text-muted-foreground space-y-1">
+              <div>• 아래쪽 연결: 조건 참 (YES) - 초록색</div>
+              <div>• 오른쪽 연결: 조건 거짓 (NO) - 빨간색</div>
             </div>
           </>
         )}

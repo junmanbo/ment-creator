@@ -32,6 +32,7 @@ class NodeType(str, Enum):
     TRANSFER = "transfer"
     END = "end"
     INPUT = "input"
+    CONDITION = "condition"
 
 # 시나리오 기본 정보
 class ScenarioBase(SQLModel):
