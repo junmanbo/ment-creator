@@ -18,7 +18,7 @@ services:
       - ./backend/voice_samples:/workspace/voice_samples
       - ./backend/audio_files:/workspace/audio_files
       - ./backend/temp_processing:/workspace/temp_processing
-      - ./fish-speech/checkpoint:/opt/fish-speech/checkpoint
+      - ./fish-speech/checkpoints:/opt/fish-speech/checkpoints
     deploy:
       resources:
         reservations:

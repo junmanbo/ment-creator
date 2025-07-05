@@ -40,7 +40,7 @@ class FishSpeechTTSService:
         
         # Fish-Speech 디렉토리 경로 (Docker 컨테이너 내부 경로)
         self.fish_speech_dir = "/opt/fish-speech"
-        self.checkpoint_dir = "/opt/fish-speech/checkpoint/openaudio-s1-mini"
+        self.checkpoint_dir = "/opt/fish-speech/checkpoints/openaudio-s1-mini"
 
     async def initialize_tts_model(self):
         """Fish-Speech Docker 컨테이너 상태 확인 (컨테이너는 미리 실행되어 있다고 가정)"""
