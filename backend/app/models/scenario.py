@@ -155,6 +155,8 @@ class ScenarioNodePublic(ScenarioNodeBase):
 class ScenarioConnectionBase(SQLModel):
     source_node_id: str = Field(max_length=50)
     target_node_id: str = Field(max_length=50)
+    source_handle: Optional[str] = Field(default=None, max_length=50)  # YES/NO 등의 핸들 ID
+    target_handle: Optional[str] = Field(default=None, max_length=50)
     condition: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     label: Optional[str] = Field(default=None, max_length=100)
 
@@ -164,6 +166,8 @@ class ScenarioConnectionCreate(ScenarioConnectionBase):
 class ScenarioConnectionUpdate(ScenarioConnectionBase):
     source_node_id: Optional[str] = None
     target_node_id: Optional[str] = None
+    source_handle: Optional[str] = None
+    target_handle: Optional[str] = None
     condition: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     label: Optional[str] = None
 

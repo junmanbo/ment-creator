@@ -4,6 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import select, and_
+from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models.scenario import (
@@ -371,20 +372,23 @@ def create_scenario_version(
             version_in
         )
 
+class AutoVersionRequest(BaseModel):
+    change_description: Optional[str] = None
+
 @router.post("/{scenario_id}/versions/auto", response_model=ScenarioVersionPublic)
 def auto_create_version(
     *,
     session: SessionDep,
     scenario_id: uuid.UUID,
     current_user: CurrentUser,
-    change_description: Optional[str] = None
+    request: AutoVersionRequest = AutoVersionRequest()
 ) -> ScenarioVersion:
     """자동 버전 생성 (시나리오 변경 시 호출)"""
     version_service = ScenarioVersionService(session)
     return version_service.auto_create_version(
         scenario_id, 
         current_user.id, 
-        change_description
+        request.change_description
     )
 
 @router.get("/{scenario_id}/versions", response_model=List[ScenarioVersionPublic])

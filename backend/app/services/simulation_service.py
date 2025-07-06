@@ -130,9 +130,8 @@ class SimulationService:
         # yes/no에 따른 연결 선택
         target_connection = None
         for conn in connection:
-            # Handle ID 기반으로 연결 선택
-            if (choice == "yes" and conn.source_node_id.endswith("yes")) or \
-               (choice == "no" and conn.source_node_id.endswith("no")):
+            # source_handle 기반으로 연결 선택
+            if conn.source_handle == choice:
                 target_connection = conn
                 break
 

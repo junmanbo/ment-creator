@@ -320,20 +320,21 @@ const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => 
       </div>
     </div>
     
-    {/* YES 출력 핸들 - 다이아몬드 아래쪽 꼭지점 */}
+    {/* YES 출력 핸들 - 다이아몬드 왼쪽 꼭지점 */}
     <Handle
       type="source"
-      position={Position.Bottom}
+      position={Position.Left}
       id="yes"
       style={{
         background: '#22c55e',
-        width: 10,
-        height: 10,
-        bottom: 0,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        width: 12,
+        height: 12,
+        left: 0,
+        top: '50%',
+        transform: 'translateY(-50%)',
         border: '2px solid white',
         borderRadius: '50%',
+        zIndex: 10,
       }}
     />
     
@@ -344,15 +345,24 @@ const ConditionNode = ({ data, selected }: { data: any; selected: boolean }) => 
       id="no"
       style={{
         background: '#ef4444',
-        width: 10,
-        height: 10,
+        width: 12,
+        height: 12,
         right: 0,
         top: '50%',
         transform: 'translateY(-50%)',
         border: '2px solid white',
         borderRadius: '50%',
+        zIndex: 10,
       }}
     />
+    
+    {/* YES/NO 라벨 추가 */}
+    <div className="absolute -left-6 top-1/2 transform -translate-y-1/2 text-xs font-bold text-green-600 bg-white px-1 rounded shadow-sm border">
+      YES
+    </div>
+    <div className="absolute -right-6 top-1/2 transform -translate-y-1/2 text-xs font-bold text-red-600 bg-white px-1 rounded shadow-sm border">
+      NO
+    </div>
   </div>
 )
 
@@ -430,7 +440,14 @@ function ScenarioEditPageContent() {
 
     const currentSnapshot = {
       nodes: nodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
-      connections: edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+      connections: edges.map(e => ({ 
+        id: e.id, 
+        source: e.source, 
+        target: e.target, 
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle,
+        label: e.label 
+      }))
     }
 
     const prevNodes = new Map(lastVersionSnapshot.nodes?.map((n: any) => [n.id, n]) || [])
@@ -499,13 +516,14 @@ function ScenarioEditPageContent() {
       const timeoutId = setTimeout(() => controller.abort(), 10000) // 10초 timeout
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/versions/auto?change_description=${encodeURIComponent(description)}`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/versions/auto`,
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({ change_description: description }),
           signal: controller.signal,
         }
       )
@@ -518,7 +536,14 @@ function ScenarioEditPageContent() {
         // 현재 상태를 새로운 기준점으로 설정
         setLastVersionSnapshot({
           nodes: nodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
-          connections: edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+          connections: edges.map(e => ({ 
+            id: e.id, 
+            source: e.source, 
+            target: e.target, 
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
+            label: e.label 
+          }))
         })
         
         // 변경 추적 초기화
@@ -649,6 +674,8 @@ function ScenarioEditPageContent() {
           id: conn.id || `edge-${index}`,
           source: conn.source_node_id,
           target: conn.target_node_id,
+          sourceHandle: conn.source_handle,
+          targetHandle: conn.target_handle,
           label: conn.label,
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -665,7 +692,14 @@ function ScenarioEditPageContent() {
         // 초기 스냅샷 설정 (버전 추적을 위한 기준점)
         setLastVersionSnapshot({
           nodes: flowNodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
-          connections: flowEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+          connections: flowEdges.map(e => ({ 
+            id: e.id, 
+            source: e.source, 
+            target: e.target, 
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
+            label: e.label 
+          }))
         })
         
         // 노드 카운터 업데이트
@@ -1027,6 +1061,8 @@ function ScenarioEditPageContent() {
             scenario_id: scenario.id,
             source_node_id: edge.source,
             target_node_id: edge.target,
+            source_handle: edge.sourceHandle || null,
+            target_handle: edge.targetHandle || null,
             condition: edge.data?.condition || null,
             label: edge.data?.label || edge.label || null
           }),
@@ -1048,7 +1084,14 @@ function ScenarioEditPageContent() {
       // 새로운 스냅샷 설정
       setLastVersionSnapshot({
         nodes: currentNodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
-        connections: currentEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+        connections: currentEdges.map(e => ({ 
+          id: e.id, 
+          source: e.source, 
+          target: e.target, 
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
+          label: e.label 
+        }))
       })
       
       // 변경 추적 초기화
@@ -1376,7 +1419,14 @@ function ScenarioEditPageContent() {
                   // 새로운 스냅샷 설정
                   setLastVersionSnapshot({
                     nodes: nodes.map(n => ({ id: n.id, ...n.data, position: n.position })),
-                    connections: edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label }))
+                    connections: edges.map(e => ({ 
+                      id: e.id, 
+                      source: e.source, 
+                      target: e.target, 
+                      sourceHandle: e.sourceHandle,
+                      targetHandle: e.targetHandle,
+                      label: e.label 
+                    }))
                   })
                   // 변경 추적 초기화
                   setChangeTracker({
