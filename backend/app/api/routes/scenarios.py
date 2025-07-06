@@ -13,9 +13,10 @@ from app.models.scenario import (
     ScenarioVersion, ScenarioVersionCreate, ScenarioVersionUpdate, ScenarioVersionPublic,
     ScenarioSimulation, ScenarioSimulationCreate, ScenarioSimulationPublic,
     ScenarioStatus, NodeType, VersionDiff, VersionRollbackRequest, VersionMergeRequest,
-    VersionStatus
+    VersionStatus, SimulationAction, SimulationResponse
 )
 from app.services.scenario_version_service import ScenarioVersionService
+from app.services.simulation_service import SimulationService
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -673,3 +674,110 @@ def stop_simulation(
     session.commit()
     
     return {"message": "시뮬레이션이 종료되었습니다."}
+
+# === 새로운 시뮬레이션 API ===
+
+@router.post("/{scenario_id}/simulation/start", response_model=SimulationResponse)
+def start_simulation(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    current_user: CurrentUser
+) -> SimulationResponse:
+    """시나리오 시뮬레이션 시작"""
+    try:
+        simulation_service = SimulationService(session)
+        return simulation_service.start_simulation(scenario_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/simulation/{simulation_id}/action", response_model=SimulationResponse)
+def execute_simulation_action(
+    *,
+    session: SessionDep,
+    simulation_id: uuid.UUID,
+    action: SimulationAction,
+    current_user: CurrentUser
+) -> SimulationResponse:
+    """시뮬레이션 액션 실행"""
+    try:
+        simulation_service = SimulationService(session)
+        
+        # 시뮬레이션 소유권 확인
+        simulation = session.get(ScenarioSimulation, simulation_id)
+        if not simulation:
+            raise HTTPException(status_code=404, detail="시뮬레이션을 찾을 수 없습니다.")
+        
+        if simulation.started_by != current_user.id:
+            raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+        
+        return simulation_service.execute_action(simulation_id, action)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/simulation/{simulation_id}", response_model=SimulationResponse)
+def get_simulation_state(
+    *,
+    session: SessionDep,
+    simulation_id: uuid.UUID,
+    current_user: CurrentUser
+) -> SimulationResponse:
+    """시뮬레이션 상태 조회"""
+    try:
+        simulation_service = SimulationService(session)
+        
+        # 시뮬레이션 소유권 확인
+        simulation = session.get(ScenarioSimulation, simulation_id)
+        if not simulation:
+            raise HTTPException(status_code=404, detail="시뮬레이션을 찾을 수 없습니다.")
+        
+        if simulation.started_by != current_user.id:
+            raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+        
+        return simulation_service.get_simulation(simulation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{scenario_id}/simulation/audio/{node_id}")
+def get_node_audio(
+    *,
+    session: SessionDep,
+    scenario_id: uuid.UUID,
+    node_id: str,
+    current_user: CurrentUser
+):
+    """노드의 TTS 오디오 파일 반환"""
+    # ScenarioTTS에서 활성화된 TTS 조회
+    from app.models.scenario_tts import ScenarioTTS
+    
+    scenario_tts = session.exec(
+        select(ScenarioTTS).where(
+            and_(
+                ScenarioTTS.scenario_id == scenario_id,
+                ScenarioTTS.node_id == node_id,
+                ScenarioTTS.is_active == True
+            )
+        )
+    ).first()
+    
+    if not scenario_tts:
+        # 디버깅을 위해 노드 존재 여부 확인
+        node_exists = session.exec(
+            select(ScenarioNode).where(
+                ScenarioNode.scenario_id == scenario_id,
+                ScenarioNode.node_id == node_id
+            )
+        ).first()
+        
+        if not node_exists:
+            raise HTTPException(status_code=404, detail=f"노드 '{node_id}'를 찾을 수 없습니다.")
+        else:
+            raise HTTPException(status_code=404, detail=f"노드 '{node_id}'의 TTS가 생성되지 않았습니다. 먼저 TTS를 생성해주세요.")
+    
+    if not scenario_tts.tts_generation_id:
+        raise HTTPException(status_code=404, detail="TTS 생성이 진행 중이거나 실패했습니다. 잠시 후 다시 시도해주세요.")
+    
+    # TTS 스트리밍 엔드포인트 URL 반환 (상대 경로로)
+    audio_url = f"/voice-actors/tts-generations/{scenario_tts.tts_generation_id}/audio"
+    
+    return {"audio_url": audio_url}

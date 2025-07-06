@@ -266,3 +266,29 @@ class ScenarioSimulationPublic(ScenarioSimulationBase):
     started_by: uuid.UUID
     started_at: datetime
     completed_at: Optional[datetime] = None
+
+# 시뮬레이션 액션 모델
+class SimulationAction(SQLModel):
+    action_type: str  # "start", "next", "input", "condition_select", "restart", "stop"
+    node_id: Optional[str] = None
+    input_value: Optional[str] = None
+    condition_choice: Optional[str] = None  # "yes", "no"
+
+# 시뮬레이션 상태 응답 모델
+class SimulationResponse(SQLModel):
+    simulation_id: uuid.UUID
+    current_node_id: Optional[str] = None
+    node_data: Optional[Dict[str, Any]] = None
+    available_actions: List[str] = []
+    status: str
+    message: Optional[str] = None
+    session_data: Optional[Dict[str, Any]] = None
+    is_completed: bool = False
+
+# 시뮬레이션 노드 정보
+class SimulationNodeInfo(SQLModel):
+    node_id: str
+    node_type: str
+    name: str
+    config: Optional[Dict[str, Any]] = None
+    connections: List[Dict[str, Any]] = []

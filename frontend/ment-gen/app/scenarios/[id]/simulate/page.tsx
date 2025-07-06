@@ -1,87 +1,124 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
-import { Separator } from "@/components/ui/separator"
 import { 
-  ArrowLeft, 
-  Play, 
-  Square, 
+  ArrowLeft,
+  Play,
+  Square,
   RotateCcw,
+  Volume2,
+  VolumeX,
+  Loader2,
   Phone,
   MessageSquare,
-  GitBranch,
-  PhoneCall,
   Mic,
-  Loader2
+  Diamond,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  User
 } from "lucide-react"
 
-interface Scenario {
+interface SimulationState {
+  simulation_id: string
+  current_node_id: string | null
+  node_data: {
+    node_id: string
+    node_type: string
+    name: string
+    config: any
+  } | null
+  available_actions: string[]
+  status: string
+  session_data: Record<string, any>
+  is_completed: boolean
+  message?: string
+}
+
+interface ScenarioInfo {
   id: string
   name: string
   description?: string
-  nodes: any[]
-  connections: any[]
-}
-
-interface Simulation {
-  id: string
-  scenario_id: string
-  current_node_id?: string
-  session_data?: any
+  category?: string
+  version: string
   status: string
-  started_at: string
 }
 
-interface SimulationStep {
-  nodeId: string
-  nodeName: string
-  nodeType: string
-  content?: string
-  options?: string[]
-  timestamp: string
-}
-
-export default function ScenarioSimulatePage() {
+export default function SimulatePage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
   
-  const [scenario, setScenario] = useState<Scenario | null>(null)
-  const [simulation, setSimulation] = useState<Simulation | null>(null)
-  const [currentNode, setCurrentNode] = useState<any>(null)
-  const [simulationSteps, setSimulationSteps] = useState<SimulationStep[]>([])
+  const scenarioId = params.id as string
+  
+  const [scenario, setScenario] = useState<ScenarioInfo | null>(null)
+  const [simulation, setSimulation] = useState<SimulationState | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isSimulating, setIsSimulating] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [inputValue, setInputValue] = useState("")
+  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [sessionHistory, setSessionHistory] = useState<Array<{
+    node_id: string
+    node_type: string
+    name: string
+    timestamp: Date
+    action?: string
+    input?: string
+  }>>([])
 
   useEffect(() => {
-    if (params.id) {
-      loadScenario(params.id as string)
-    }
-  }, [params.id])
+    fetchScenarioInfo()
+  }, [scenarioId])
 
-  const loadScenario = async (scenarioId: string) => {
+  const fetchScenarioInfo = async () => {
     try {
       const accessToken = localStorage.getItem("access_token")
+      if (!accessToken) {
+        toast({
+          title: "인증 필요",
+          description: "로그인이 필요합니다.",
+          variant: "destructive",
+        })
+        router.push("/login")
+        return
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenarioId}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
       })
 
       if (response.ok) {
         const data = await response.json()
         setScenario(data)
+      } else if (response.status === 404) {
+        toast({
+          title: "시나리오를 찾을 수 없음",
+          description: "해당 시나리오가 존재하지 않습니다.",
+          variant: "destructive",
+        })
+        router.push("/scenarios")
+      } else {
+        throw new Error("Failed to fetch scenario")
       }
     } catch (error) {
-      console.error("Load scenario error:", error)
+      console.error("Fetch scenario error:", error)
       toast({
-        title: "로드 실패",
-        description: "시나리오를 불러오는데 실패했습니다.",
+        title: "오류 발생",
+        description: "시나리오 정보를 불러오는데 실패했습니다.",
         variant: "destructive",
       })
     } finally {
@@ -90,346 +127,544 @@ export default function ScenarioSimulatePage() {
   }
 
   const startSimulation = async () => {
-    if (!scenario) return
-
-    // 시작 노드 찾기
-    const startNode = scenario.nodes.find(node => node.node_type === "start")
-    if (!startNode) {
-      toast({
-        title: "시뮬레이션 오류",
-        description: "시작 노드가 없습니다.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsSimulating(true)
+    setIsStarting(true)
     try {
       const accessToken = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenario.id}/simulate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            scenario_id: scenario.id,
-            start_node_id: startNode.node_id,
-            simulation_config: {}
-          }),
-        }
-      )
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenarioId}/simulation/start`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      })
 
       if (response.ok) {
-        const simulationData = await response.json()
-        setSimulation(simulationData)
-        setCurrentNode(startNode)
+        const data = await response.json()
+        setSimulation(data)
+        setSessionHistory([])
         
-        // 첫 번째 단계 추가
-        addSimulationStep(startNode)
+        if (data.node_data) {
+          addToHistory(data.node_data, "시뮬레이션 시작")
+        }
         
         toast({
           title: "시뮬레이션 시작",
-          description: "ARS 시나리오 시뮬레이션이 시작되었습니다.",
+          description: "시나리오 시뮬레이션이 시작되었습니다.",
         })
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || "시뮬레이션 시작 실패")
       }
     } catch (error) {
       console.error("Start simulation error:", error)
       toast({
         title: "시뮬레이션 시작 실패",
-        description: "시뮬레이션을 시작하는데 실패했습니다.",
+        description: error instanceof Error ? error.message : "시뮬레이션을 시작할 수 없습니다.",
         variant: "destructive",
       })
     } finally {
-      setIsSimulating(false)
+      setIsStarting(false)
     }
   }
 
-  const addSimulationStep = (node: any, userInput?: string) => {
-    const step: SimulationStep = {
-      nodeId: node.node_id,
-      nodeName: node.name,
-      nodeType: node.node_type,
-      content: node.config?.text || "",
-      timestamp: new Date().toISOString()
-    }
-
-    // 분기 노드의 경우 옵션 추가
-    if (node.node_type === "branch" && node.config?.branches) {
-      step.options = node.config.branches.map((branch: any) => `${branch.key}. ${branch.label}`)
-    }
-
-    setSimulationSteps(prev => [...prev, step])
-  }
-
-  const selectOption = (optionKey: string) => {
-    if (!currentNode || !scenario) return
-
-    // 현재 노드에서 선택된 옵션에 따른 다음 노드 찾기
-    const connection = scenario.connections.find(conn => 
-      conn.source_node_id === currentNode.node_id &&
-      conn.condition?.input === optionKey
-    )
-
-    if (connection) {
-      const nextNode = scenario.nodes.find(node => node.node_id === connection.target_node_id)
-      if (nextNode) {
-        setCurrentNode(nextNode)
-        addSimulationStep(nextNode)
-      }
-    }
-  }
-
-  const stopSimulation = async () => {
+  const executeAction = async (actionType: string, data?: any) => {
     if (!simulation) return
+
+    setIsExecuting(true)
+    try {
+      const accessToken = localStorage.getItem("access_token")
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/simulation/${simulation.simulation_id}/action`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action_type: actionType,
+          ...data
+        }),
+      })
+
+      if (response.ok) {
+        const newState = await response.json()
+        setSimulation(newState)
+        
+        if (newState.node_data) {
+          addToHistory(newState.node_data, actionType, data?.input_value || data?.condition_choice)
+        }
+        
+        // 입력 필드 초기화
+        setInputValue("")
+        
+        if (newState.is_completed) {
+          toast({
+            title: "시뮬레이션 완료",
+            description: "시나리오가 완료되었습니다.",
+          })
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || "액션 실행 실패")
+      }
+    } catch (error) {
+      console.error("Execute action error:", error)
+      toast({
+        title: "액션 실행 실패",
+        description: error instanceof Error ? error.message : "액션을 실행할 수 없습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
+  const addToHistory = (nodeData: any, action: string, input?: string) => {
+    setSessionHistory(prev => [...prev, {
+      node_id: nodeData.node_id,
+      node_type: nodeData.node_type,
+      name: nodeData.name,
+      timestamp: new Date(),
+      action,
+      input
+    }])
+  }
+
+  const playAudio = async () => {
+    if (!simulation?.node_data || simulation.node_data.node_type !== "message") {
+      toast({
+        title: "오디오 없음",
+        description: "이 노드에는 오디오 파일이 없습니다.",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
       const accessToken = localStorage.getItem("access_token")
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/simulations/${simulation.id}`,
-        {
-          method: "DELETE",
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scenarios/${scenarioId}/simulation/audio/${simulation.node_data.node_id}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // 인증이 필요한 오디오 스트림을 위해 fetch로 오디오 데이터 가져오기
+        const audioUrl = data.audio_url.startsWith('http') 
+          ? data.audio_url 
+          : `${process.env.NEXT_PUBLIC_API_BASE_URL}${data.audio_url}`
+          
+        console.log("Fetching audio from URL:", audioUrl)
+        const audioResponse = await fetch(audioUrl, {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
+        })
+        
+        console.log("Audio response status:", audioResponse.status)
+        
+        if (audioResponse.ok) {
+          const audioBlob = await audioResponse.blob()
+          const audioBlobUrl = URL.createObjectURL(audioBlob)
+          const audio = new Audio(audioBlobUrl)
+          setAudioRef(audio)
+          setIsPlaying(true)
+          
+          audio.onended = () => {
+            setIsPlaying(false)
+            URL.revokeObjectURL(audioBlobUrl) // 메모리 정리
+          }
+          
+          audio.onerror = () => {
+            setIsPlaying(false)
+            URL.revokeObjectURL(audioBlobUrl) // 메모리 정리
+            toast({
+              title: "오디오 재생 실패",
+              description: "오디오 파일을 재생할 수 없습니다.",
+              variant: "destructive",
+            })
+          }
+          
+          await audio.play()
+        } else {
+          const errorText = await audioResponse.text()
+          console.error("Audio fetch error:", audioResponse.status, errorText)
+          throw new Error(`오디오 데이터 가져오기 실패: ${audioResponse.status} ${errorText}`)
         }
-      )
-
-      setSimulation(null)
-      setCurrentNode(null)
-      setSimulationSteps([])
-      
-      toast({
-        title: "시뮬레이션 종료",
-        description: "시뮬레이션이 종료되었습니다.",
-      })
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.detail || "오디오 URL을 가져올 수 없습니다"
+        
+        if (errorMessage.includes("TTS가 생성되지 않았습니다")) {
+          toast({
+            title: "TTS 필요",
+            description: "이 노드의 TTS를 먼저 생성해주세요.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "오디오 재생 실패",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
+        return
+      }
     } catch (error) {
-      console.error("Stop simulation error:", error)
+      console.error("Play audio error:", error)
+      toast({
+        title: "오디오 재생 실패",
+        description: error instanceof Error ? error.message : "오디오를 재생할 수 없습니다.",
+        variant: "destructive",
+      })
     }
   }
 
-  const resetSimulation = () => {
-    if (simulation) {
-      stopSimulation()
+  const stopAudio = () => {
+    if (audioRef) {
+      audioRef.pause()
+      audioRef.currentTime = 0
+      setIsPlaying(false)
     }
-    setSimulationSteps([])
-    setCurrentNode(null)
   }
 
   const getNodeIcon = (nodeType: string) => {
     switch (nodeType) {
-      case "start": return <Phone className="h-4 w-4 text-green-600" />
-      case "message": return <MessageSquare className="h-4 w-4 text-blue-600" />
-      case "branch": return <GitBranch className="h-4 w-4 text-yellow-600" />
-      case "transfer": return <PhoneCall className="h-4 w-4 text-purple-600" />
-      case "input": return <Mic className="h-4 w-4 text-gray-600" />
-      default: return <Square className="h-4 w-4 text-red-600" />
+      case "start": return <Phone className="h-4 w-4" />
+      case "message": return <MessageSquare className="h-4 w-4" />
+      case "input": return <Mic className="h-4 w-4" />
+      case "condition": return <Diamond className="h-4 w-4" />
+      case "end": return <CheckCircle className="h-4 w-4" />
+      default: return <AlertCircle className="h-4 w-4" />
     }
   }
 
-  const getNodeTypeLabel = (nodeType: string) => {
+  const getNodeTypeName = (nodeType: string) => {
     switch (nodeType) {
       case "start": return "시작"
       case "message": return "메시지"
-      case "branch": return "분기"
-      case "transfer": return "상담원 연결"
       case "input": return "입력"
+      case "condition": return "조건"
+      case "branch": return "분기"
+      case "transfer": return "전환"
       case "end": return "종료"
       default: return nodeType
     }
   }
 
+  const renderNodeActions = () => {
+    if (!simulation?.node_data || !simulation.available_actions.length) {
+      return null
+    }
+
+    const nodeType = simulation.node_data.node_type
+    const actions = simulation.available_actions
+
+    return (
+      <div className="space-y-4">
+        {nodeType === "input" && actions.includes("input") && (
+          <div className="space-y-2">
+            <Label>입력 값</Label>
+            <div className="flex space-x-2">
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="값을 입력하세요"
+                onKeyPress={(e) => e.key === 'Enter' && inputValue.trim() && executeAction("input", { input_value: inputValue.trim() })}
+                disabled={isExecuting}
+              />
+              <Button 
+                onClick={() => executeAction("input", { input_value: inputValue.trim() })}
+                disabled={!inputValue.trim() || isExecuting}
+              >
+                입력
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {nodeType === "condition" && actions.includes("condition_select") && (
+          <div className="space-y-2">
+            <Label>조건 선택</Label>
+            <div className="flex space-x-2">
+              <Button 
+                onClick={() => executeAction("condition_select", { condition_choice: "yes" })}
+                disabled={isExecuting}
+                variant="outline"
+                className="flex-1"
+              >
+                YES
+              </Button>
+              <Button 
+                onClick={() => executeAction("condition_select", { condition_choice: "no" })}
+                disabled={isExecuting}
+                variant="outline"
+                className="flex-1"
+              >
+                NO
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {actions.includes("next") && (
+          <Button 
+            onClick={() => executeAction("next")}
+            disabled={isExecuting}
+            className="w-full"
+          >
+            다음
+          </Button>
+        )}
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex justify-center items-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">시나리오를 불러오는 중...</span>
+        <span className="ml-2">시나리오 정보를 불러오는 중...</span>
       </div>
     )
   }
 
   if (!scenario) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <p>시나리오를 찾을 수 없습니다.</p>
+      <div className="container mx-auto p-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            시나리오를 찾을 수 없습니다.
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto p-6 space-y-6">
       {/* 헤더 */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => router.push("/scenarios")}>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/scenarios")}
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            목록으로
+            시나리오 목록
           </Button>
           <div>
             <h1 className="text-2xl font-bold">{scenario.name} - 시뮬레이션</h1>
-            <p className="text-gray-600">ARS 시나리오 흐름을 미리 체험해보세요</p>
+            <p className="text-muted-foreground">
+              {scenario.description || "시나리오 시뮬레이션을 실행합니다"}
+            </p>
           </div>
         </div>
         
         <div className="flex items-center space-x-2">
-          {!simulation ? (
-            <Button onClick={startSimulation} disabled={isSimulating}>
-              {isSimulating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              시뮬레이션 시작
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={resetSimulation}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                다시 시작
-              </Button>
-              <Button variant="destructive" onClick={stopSimulation}>
-                <Square className="h-4 w-4 mr-2" />
-                시뮬레이션 종료
-              </Button>
-            </>
-          )}
+          <Badge variant="outline">{scenario.category}</Badge>
+          <Badge variant="secondary">v{scenario.version}</Badge>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 현재 단계 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>현재 단계</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {currentNode ? (
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  {getNodeIcon(currentNode.node_type)}
-                  <Badge variant="outline">{getNodeTypeLabel(currentNode.node_type)}</Badge>
-                  <span className="font-medium">{currentNode.name}</span>
-                </div>
-                
-                {currentNode.config?.text && (
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <p className="text-sm font-medium text-blue-900">음성 멘트:</p>
-                    <p className="text-blue-800">{currentNode.config.text}</p>
-                  </div>
-                )}
-                
-                {currentNode.node_type === "branch" && currentNode.config?.branches && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">고객 선택 옵션:</p>
-                    <div className="space-y-2">
-                      {currentNode.config.branches.map((branch: any, index: number) => (
-                        <Button
-                          key={index}
-                          variant="outline"
-                          className="w-full justify-start"
-                          onClick={() => selectOption(branch.key)}
-                        >
-                          {branch.key}. {branch.label}
-                        </Button>
-                      ))}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 시뮬레이션 제어 */}
+        <div className="lg:col-span-2 space-y-6">
+          {!simulation ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Play className="h-5 w-5" />
+                  <span>시뮬레이션 시작</span>
+                </CardTitle>
+                <CardDescription>
+                  시나리오 시뮬레이션을 시작하여 플로우를 테스트해보세요.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={startSimulation} disabled={isStarting} size="lg" className="w-full">
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      시작 중...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      시뮬레이션 시작
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* 현재 노드 상태 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      {simulation.node_data && getNodeIcon(simulation.node_data.node_type)}
+                      <span>현재 노드</span>
                     </div>
-                  </div>
-                )}
-                
-                {currentNode.node_type === "transfer" && (
-                  <div className="p-4 bg-purple-50 rounded-lg">
-                    <p className="text-purple-900">상담원에게 연결됩니다.</p>
-                  </div>
-                )}
-                
-                {currentNode.node_type === "end" && (
-                  <div className="p-4 bg-red-50 rounded-lg">
-                    <p className="text-red-900">통화가 종료됩니다.</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">
-                시뮬레이션을 시작하세요
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 시뮬레이션 로그 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>시뮬레이션 로그</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {simulationSteps.map((step, index) => (
-                <div key={index} className="border-l-2 border-gray-200 pl-4 pb-3">
-                  <div className="flex items-center space-x-2 mb-1">
-                    {getNodeIcon(step.nodeType)}
-                    <span className="text-sm font-medium">{step.nodeName}</span>
-                    <Badge variant="outline" className="text-xs">
-                      {getNodeTypeLabel(step.nodeType)}
+                    <Badge variant={simulation.is_completed ? "default" : "secondary"}>
+                      {simulation.is_completed ? "완료" : simulation.status}
                     </Badge>
-                  </div>
-                  
-                  {step.content && (
-                    <p className="text-sm text-gray-600 mb-1">{step.content}</p>
+                  </CardTitle>
+                  {simulation.node_data && (
+                    <CardDescription>
+                      {getNodeTypeName(simulation.node_data.node_type)} - {simulation.node_data.name}
+                    </CardDescription>
                   )}
-                  
-                  {step.options && (
-                    <div className="text-xs text-gray-500">
-                      <p>선택 옵션:</p>
-                      <ul className="list-disc list-inside ml-2">
-                        {step.options.map((option, optionIndex) => (
-                          <li key={optionIndex}>{option}</li>
-                        ))}
-                      </ul>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {simulation.node_data && (
+                    <div className="space-y-4">
+                      {/* 노드 내용 */}
+                      {simulation.node_data.config?.message && (
+                        <div className="bg-muted p-4 rounded-lg">
+                          <Label className="text-sm font-medium">메시지</Label>
+                          <p className="mt-1">{simulation.node_data.config.message}</p>
+                        </div>
+                      )}
+                      
+                      {simulation.node_data.config?.prompt && (
+                        <div className="bg-muted p-4 rounded-lg">
+                          <Label className="text-sm font-medium">안내 메시지</Label>
+                          <p className="mt-1">{simulation.node_data.config.prompt}</p>
+                        </div>
+                      )}
+
+                      {/* 오디오 재생 */}
+                      {simulation.node_data.node_type === "message" && (
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            onClick={isPlaying ? stopAudio : playAudio}
+                            disabled={isExecuting}
+                          >
+                            {isPlaying ? (
+                              <>
+                                <VolumeX className="h-4 w-4 mr-2" />
+                                정지
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="h-4 w-4 mr-2" />
+                                재생
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* 노드별 액션 */}
+                      {renderNodeActions()}
                     </div>
                   )}
-                  
-                  <p className="text-xs text-gray-400">
-                    {new Date(step.timestamp).toLocaleTimeString()}
-                  </p>
-                </div>
-              ))}
-              
-              {simulationSteps.length === 0 && (
-                <p className="text-gray-500 text-center py-8">
-                  시뮬레이션 로그가 여기에 표시됩니다
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* 시나리오 정보 */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>시나리오 정보</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-600">총 노드 수</p>
-              <p className="text-lg font-semibold">{scenario.nodes.length}개</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-600">연결 수</p>
-              <p className="text-lg font-semibold">{scenario.connections.length}개</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-600">시뮬레이션 상태</p>
-              <Badge variant={simulation ? "default" : "secondary"}>
-                {simulation ? "진행 중" : "대기"}
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                  {/* 전역 액션 */}
+                  <div className="flex space-x-2 pt-4 border-t">
+                    {simulation.available_actions.includes("restart") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => executeAction("restart")}
+                        disabled={isExecuting}
+                      >
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        재시작
+                      </Button>
+                    )}
+                    
+                    {simulation.available_actions.includes("stop") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => executeAction("stop")}
+                        disabled={isExecuting}
+                      >
+                        <Square className="h-4 w-4 mr-2" />
+                        중지
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 시뮬레이션 완료 */}
+              {simulation.is_completed && (
+                <Alert>
+                  <CheckCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    시나리오 시뮬레이션이 완료되었습니다.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* 세션 정보 및 히스토리 */}
+        <div className="space-y-6">
+          {/* 세션 데이터 */}
+          {simulation?.session_data && Object.keys(simulation.session_data).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <User className="h-4 w-4" />
+                  <span>세션 데이터</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {Object.entries(simulation.session_data).map(([key, value]) => (
+                    <div key={key} className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">{key}:</span>
+                      <span className="text-sm font-medium">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 히스토리 */}
+          {sessionHistory.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4" />
+                  <span>진행 히스토리</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {sessionHistory.map((item, index) => (
+                    <div key={index} className="flex items-start space-x-3 text-sm">
+                      <div className="flex-shrink-0 mt-0.5">
+                        {getNodeIcon(item.node_type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">{item.name}</div>
+                        <div className="text-muted-foreground">{item.action}</div>
+                        {item.input && (
+                          <div className="text-xs bg-muted px-2 py-1 rounded mt-1">
+                            입력: {item.input}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          {item.timestamp.toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -161,8 +161,7 @@ async def generate_node_tts(
     background_tasks.add_task(
         tts_service.process_scenario_tts_generation,
         generation.id,
-        scenario_tts.id,
-        session
+        scenario_tts.id
     )
     
     return {
