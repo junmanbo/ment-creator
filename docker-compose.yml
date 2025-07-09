@@ -21,7 +21,7 @@ services:
     container_name: ment-creator-frontend
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=/api/v1
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost/api/v1
     depends_on:
       - backend
     networks:
@@ -38,7 +38,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - SECRET_KEY=${SECRET_KEY}
-      - FISH_SPEECH_API_URL=http://fish-speech-tts:8080
       - PROJECT_NAME=${PROJECT_NAME:-ARS TTS System}
       - POSTGRES_SERVER=db
       - POSTGRES_PORT=5432
@@ -54,40 +53,6 @@ services:
       - ./backend/temp_processing:/app/temp_processing
     depends_on:
       - db
-      - fish-speech-tts
-    networks:
-      - ment-creator-network
-
-  fish-speech-tts:
-    image: ${IMAGE_NAME}
-    container_name: ${CONTAINER_NAME}
-    restart: unless-stopped
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
-      - FISH_SPEECH_DEVICE=${FISH_SPEECH_DEVICE}
-      - FISH_SPEECH_MODEL_PATH=${FISH_SPEECH_MODEL_PATH}
-      - PYTHONPATH=${PYTHONPATH}
-      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED}
-      - TORCH_HOME=${TORCH_HOME}
-      - LOG_LEVEL=${LOG_LEVEL}
-    volumes:
-      - ./backend/voice_samples:/workspace/voice_samples
-      - ./backend/audio_files:/workspace/audio_files
-      - ./backend/temp_processing:/workspace/temp_processing
-      - ./fish-speech/checkpoints:/opt/fish-speech/checkpoints
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     networks:
       - ment-creator-network
 
