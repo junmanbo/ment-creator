@@ -218,15 +218,28 @@ export default function LoginPage() {
                     )}
                   </Button>
                   
-                  <Button 
-                    type="button"
-                    variant="ghost" 
-                    className="w-full h-11 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-                    onClick={handleForgotPassword}
-                    disabled={isLoading}
-                  >
-                    비밀번호 찾기
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button 
+                      type="button"
+                      variant="ghost" 
+                      className="flex-1 h-11 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+                      onClick={handleForgotPassword}
+                      disabled={isLoading}
+                    >
+                      비밀번호 찾기
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      className="flex-1 h-11 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                      asChild
+                      disabled={isLoading}
+                    >
+                      <Link href="/register">
+                        회원가입
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </form>
             </CardContent>
