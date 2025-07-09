@@ -11,11 +11,11 @@ RUN apt-get update && apt-get install -y \
 # Install uv
 RUN pip install uv
 
-# Install dependencies
-RUN uv sync --frozen
-
 # Copy application code
 COPY . .
+
+# Install dependencies
+RUN uv sync --frozen
 
 # Create necessary directories
 RUN mkdir -p audio_files voice_samples voice_models temp_processing
