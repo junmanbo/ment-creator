@@ -11,12 +11,6 @@ RUN apt-get update && apt-get install -y \
 # Install uv
 RUN pip install uv
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
-
-# Create a minimal README.md for build
-RUN echo "# ARS TTS Backend" > README.md
-
 # Install dependencies
 RUN uv sync --frozen
 
