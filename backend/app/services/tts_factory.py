@@ -216,5 +216,11 @@ def get_current_tts_engine() -> Optional[TTSEngine]:
     """현재 TTS 엔진 반환"""
     return tts_factory.get_current_engine()
 
-# 호환성을 위해 기본 TTS 서비스 인스턴스도 제공
-tts_service = get_tts_service()
+# 호환성을 위해 기본 TTS 서비스 인스턴스도 제공 (지연 로딩)
+tts_service = None
+
+def get_default_tts_service():
+    global tts_service
+    if tts_service is None:
+        tts_service = get_tts_service()
+    return tts_service

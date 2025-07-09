@@ -17,6 +17,7 @@ const nextConfig = {
     unoptimized: true,
     domains: ['localhost', '192.168.0.75'],
   },
+  output: 'standalone',
   experimental: {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,

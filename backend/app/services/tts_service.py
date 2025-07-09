@@ -21,19 +21,13 @@ class FishSpeechTTSService:
     """Fish-Speech 기반 TTS 생성 및 관리를 담당하는 서비스 클래스"""
 
     def __init__(self):
-        # Determine correct paths based on current working directory
-        current_dir = Path.cwd()
-        if current_dir.name == 'backend':
-            # Running from backend directory
-            self.audio_files_dir = Path("audio_files")
-            self.reference_audio_dir = Path("voice_samples")
-        else:
-            # Running from project root
-            self.audio_files_dir = Path("backend/audio_files")
-            self.reference_audio_dir = Path("backend/voice_samples")
+        # Use absolute paths for Docker container
+        self.audio_files_dir = Path("/app/audio_files")
+        self.reference_audio_dir = Path("/app/voice_samples")
         
-        self.audio_files_dir.mkdir(exist_ok=True)
-        self.reference_audio_dir.mkdir(exist_ok=True)
+        # Create directories with parents
+        self.audio_files_dir.mkdir(parents=True, exist_ok=True)
+        self.reference_audio_dir.mkdir(parents=True, exist_ok=True)
         self.model_loaded = False
         self.docker_container_name = "fish-speech-tts"
         self.docker_image_name = "openaudio-s1-mini"
@@ -958,7 +952,14 @@ class FishSpeechTTSService:
 
 # 기존 Coqui TTS 서비스를 Fish-Speech 서비스로 교체
 # 싱글톤 인스턴스
-tts_service = FishSpeechTTSService()
+# 지연 초기화 (import 시점이 아닌 실제 사용 시점에 초기화)
+tts_service = None
+
+def get_tts_service():
+    global tts_service
+    if tts_service is None:
+        tts_service = FishSpeechTTSService()
+    return tts_service
 
 # 기존 코드와의 호환성을 위한 alias
 TTSService = FishSpeechTTSService

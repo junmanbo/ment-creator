@@ -82,8 +82,8 @@ class Settings(BaseSettings):
 
     # TTS 관련 설정
     TTS_MODEL_CACHE_DIR: str = "/tmp/tts_models"
-    AUDIO_FILES_DIR: str = "audio_files"
-    VOICE_SAMPLES_DIR: str = "voice_samples"
+    AUDIO_FILES_DIR: str = "/app/audio_files"
+    VOICE_SAMPLES_DIR: str = "/app/voice_samples"
     TTS_GPU_ENABLED: bool = False
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:

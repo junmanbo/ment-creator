@@ -1,3 +1,1 @@
-from .tts_service import tts_service, TTSService
-
-__all__ = ["tts_service", "TTSService"]
+# Empty init file to prevent import issues
