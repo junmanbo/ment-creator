@@ -388,14 +388,14 @@ class FishSpeechTTSService:
                 try:
                     file_size = audio_path.stat().st_size
                     # 개선된 크기 기준: 1MB ~ 10MB (테스트에서 검증된 범위)
-                    if 1000000 <= file_size <= 10000000:
+                    if 10000 <= file_size <= 100000:
                         valid_samples.append({
                             'path': str(audio_path),
                             'size': file_size,
                             'name': audio_path.name
                         })
                         logger.info(f"📂 유효한 참조 음성 발견: {audio_path.name} ({file_size:,} bytes)")
-                    elif 500000 <= file_size < 1000000:
+                    elif 5000 <= file_size < 10000:
                         # 작은 파일도 후보로 포함 (품질은 낮을 수 있음)
                         valid_samples.append({
                             'path': str(audio_path),
