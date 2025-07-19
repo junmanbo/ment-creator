@@ -39,7 +39,9 @@ import Link from "next/link"
 interface DashboardStats {
   activeScenarios: number
   ttsInProgress: number
+  ttsCompletedToday: number
   voiceModels: number
+  totalMents: number
   systemStatus: "정상" | "주의" | "오류"
 }
 
@@ -68,70 +70,144 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
-    activeScenarios: 15,
-    ttsInProgress: 3,
-    voiceModels: 8,
+    activeScenarios: 0,
+    ttsInProgress: 0,
+    ttsCompletedToday: 0,
+    voiceModels: 0,
+    totalMents: 0,
     systemStatus: "정상"
   })
 
-  const [recentScenarios] = useState<RecentScenario[]>([
-    {
-      id: "1",
-      name: "자동차보험 접수",
-      status: "active",
-      lastModified: "2025-05-25",
-      category: "보험접수"
-    },
-    {
-      id: "2", 
-      name: "화재보험 문의",
-      status: "inactive",
-      lastModified: "2025-05-24",
-      category: "보험문의"
-    },
-    {
-      id: "3",
-      name: "고객센터 일반",
-      status: "active",
-      lastModified: "2025-05-23",
-      category: "일반상담"
+  const [recentScenarios, setRecentScenarios] = useState<RecentScenario[]>([])
+  const [ttsChartData, setTtsChartData] = useState<TTSStatData[]>([])
+  const [pieData, setPieData] = useState<any[]>([])
+  const [workStatuses, setWorkStatuses] = useState<WorkStatus[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // API 호출 함수들
+  const fetchDashboardStats = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/dashboard/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setStats({
+          activeScenarios: data.activeScenarios,
+          ttsInProgress: data.ttsInProgress,
+          ttsCompletedToday: data.ttsCompletedToday,
+          voiceModels: data.voiceModels,
+          totalMents: data.totalMents,
+          systemStatus: data.systemStatus
+        })
+      }
+    } catch (error) {
+      console.error('통계 데이터 조회 실패:', error)
     }
-  ])
+  }
 
-  const [ttsChartData] = useState<TTSStatData[]>([
-    { date: "5/20", count: 45, quality: 92 },
-    { date: "5/21", count: 52, quality: 94 },
-    { date: "5/22", count: 38, quality: 91 },
-    { date: "5/23", count: 65, quality: 93 },
-    { date: "5/24", count: 58, quality: 95 },
-    { date: "5/25", count: 72, quality: 94 },
-    { date: "5/26", count: 43, quality: 92 }
-  ])
-
-  const [pieData] = useState([
-    { name: "활성", value: 12, color: "#00C49F" },
-    { name: "비활성", value: 2, color: "#FFBB28" },
-    { name: "테스트", value: 1, color: "#FF8042" }
-  ])
-
-  const [workStatuses] = useState<WorkStatus[]>([
-    {
-      id: "1",
-      type: "진행중",
-      message: "자동차보험 시나리오 TTS 생성 중...",
-      progress: 70
-    },
-    {
-      id: "2",
-      type: "완료",
-      message: "화재보험 멘트 업데이트 완료"
-    },
-    {
-      id: "3",
-      type: "대기",
-      message: "새로운 성우 음성 모델 학습 대기 중"
+  const fetchRecentScenarios = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/dashboard/recent-scenarios`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setRecentScenarios(data)
+      }
+    } catch (error) {
+      console.error('최근 시나리오 조회 실패:', error)
     }
-  ])
+  }
+
+  const fetchTtsStats = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/dashboard/tts-stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setTtsChartData(data)
+      }
+    } catch (error) {
+      console.error('TTS 통계 조회 실패:', error)
+    }
+  }
+
+  const fetchScenarioDistribution = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/dashboard/scenario-status-distribution`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPieData(data)
+      }
+    } catch (error) {
+      console.error('시나리오 분포 조회 실패:', error)
+    }
+  }
+
+  const fetchWorkStatuses = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/dashboard/work-statuses`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setWorkStatuses(data)
+      }
+    } catch (error) {
+      console.error('작업 상태 조회 실패:', error)
+    }
+  }
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      setLoading(true)
+      await Promise.all([
+        fetchDashboardStats(),
+        fetchRecentScenarios(),
+        fetchTtsStats(),
+        fetchScenarioDistribution(),
+        fetchWorkStatuses()
+      ])
+      setLoading(false)
+    }
+
+    loadDashboardData()
+  }, [])
+
+  // 30초마다 데이터 자동 새로고침
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDashboardStats()
+      fetchWorkStatuses()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -170,6 +246,17 @@ export default function DashboardPage() {
       default:
         return <Activity className="h-4 w-4" />
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">대시보드 데이터를 불러오는 중...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -220,7 +307,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">진행중: {stats.ttsInProgress}개</div>
             <p className="text-xs text-muted-foreground">
-              오늘 완료: 12개
+              오늘 완료: {stats.ttsCompletedToday}개
             </p>
           </CardContent>
         </Card>
@@ -233,7 +320,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.voiceModels}개</div>
             <p className="text-xs text-muted-foreground">
-              활성 모델: 6개
+              전체 멘트: {stats.totalMents}개
             </p>
           </CardContent>
         </Card>

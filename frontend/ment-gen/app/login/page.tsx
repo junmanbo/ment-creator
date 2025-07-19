@@ -67,8 +67,12 @@ export default function LoginPage() {
         body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
       })
 
+      console.log('Response status:', response.status)
+      console.log('Response ok:', response.ok)
+
       if (response.ok) {
         const data = await response.json()
+        console.log('Login successful, token received')
         
         // Redux store에 로그인 상태 저장
         dispatch(login({ token: data.access_token }))
@@ -83,6 +87,16 @@ export default function LoginPage() {
         })
         router.push("/")
       } else {
+        let errorMessage = "로그인 중 오류가 발생했습니다."
+        
+        try {
+          const errorData = await response.json()
+          console.log('Error response:', errorData)
+          errorMessage = errorData.detail || errorMessage
+        } catch (parseError) {
+          console.log('Could not parse error response:', parseError)
+        }
+
         if (response.status === 400) {
           toast({
             title: "로그인 실패",
@@ -98,16 +112,27 @@ export default function LoginPage() {
         } else {
           toast({
             title: "접속 오류",
-            description: "로그인 중 오류가 발생했습니다. 다시 시도해주세요.",
+            description: errorMessage,
             variant: "destructive",
           })
         }
       }
     } catch (error) {
       console.error("Login error:", error)
+      console.error("Error type:", error.constructor.name)
+      console.error("Error message:", error.message)
+      
+      let errorDescription = "서버와의 연결에 문제가 있습니다. 네트워크 연결을 확인해주세요."
+      
+      if (error instanceof TypeError) {
+        errorDescription = "네트워크 연결에 문제가 있습니다. 서버가 실행 중인지 확인해주세요."
+      } else if (error.message) {
+        errorDescription = `연결 오류: ${error.message}`
+      }
+      
       toast({
         title: "네트워크 오류",
-        description: "서버와의 연결에 문제가 있습니다. 네트워크 연결을 확인해주세요.",
+        description: errorDescription,
         variant: "destructive",
       })
     } finally {
