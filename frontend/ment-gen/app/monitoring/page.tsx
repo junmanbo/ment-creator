@@ -103,60 +103,69 @@ export default function SystemMonitoringPage() {
   })
   
   const [ttsMetrics, setTtsMetrics] = useState<TTSMetrics>({
-    total_generated: 1247,
-    in_progress: 3,
-    completed_today: 47,
-    failed_today: 2,
-    average_generation_time: 45,
-    quality_average: 93.2
+    total_generated: 1863,
+    in_progress: 2,
+    completed_today: 53,
+    failed_today: 1,
+    average_generation_time: 38,
+    quality_average: 94.1
   })
   
   const [scenarioMetrics, setScenarioMetrics] = useState<ScenarioMetrics>({
-    total_scenarios: 15,
-    active_scenarios: 12,
-    inactive_scenarios: 2,
+    total_scenarios: 18,
+    active_scenarios: 14,
+    inactive_scenarios: 3,
     testing_scenarios: 1,
   })
   
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([
     {
       id: "1",
-      level: "ERROR",
-      message: "TTS 생성 실패: 음성 모델 로딩 오류",
-      module: "TTS Engine",
-      timestamp: "2025-06-06T14:30:00Z",
-      count: 2
+      level: "WARNING",
+      message: "높은 메모리 사용량 감지 (85% 사용 중)",
+      module: "System Monitor",
+      timestamp: "2025-07-19T15:30:00Z",
+      count: 1
     },
     {
       id: "2",
-      level: "WARNING",
-      message: "높은 메모리 사용량 감지",
-      module: "System Monitor",
-      timestamp: "2025-06-06T14:15:00Z",
+      level: "INFO",
+      message: "성우 모델 학습 완료: 김수진 성우",
+      module: "Voice Training",
+      timestamp: "2025-07-19T14:45:00Z",
       count: 1
     },
     {
       id: "3",
       level: "ERROR",
-      message: "데이터베이스 연결 시간 초과",
-      module: "Database",
-      timestamp: "2025-06-06T13:45:00Z",
+      message: "TTS 생성 실패: 네트워크 연결 오류",
+      module: "TTS Engine",
+      timestamp: "2025-07-19T13:20:00Z",
+      count: 1
+    },
+    {
+      id: "4",
+      level: "INFO",
+      message: "시나리오 배포 완료: 자동차보험 상담",
+      module: "Scenario Manager",
+      timestamp: "2025-07-19T12:15:00Z",
       count: 1
     }
   ])
   
   const [chartData, setChartData] = useState<ChartData[]>([
-    { date: "06/01", tts_count: 45, quality: 92, response_time: 245, cpu_usage: 68, memory_usage: 72 },
-    { date: "06/02", tts_count: 52, quality: 94, response_time: 234, cpu_usage: 65, memory_usage: 75 },
-    { date: "06/03", tts_count: 38, quality: 91, response_time: 267, cpu_usage: 72, memory_usage: 78 },
-    { date: "06/04", tts_count: 65, quality: 93, response_time: 198, cpu_usage: 58, memory_usage: 68 },
-    { date: "06/05", tts_count: 58, quality: 95, response_time: 223, cpu_usage: 62, memory_usage: 74 },
-    { date: "06/06", tts_count: 47, quality: 94, response_time: 234, cpu_usage: 65, memory_usage: 78 }
+    { date: "07/13", tts_count: 45, quality: 92.1, response_time: 245, cpu_usage: 68, memory_usage: 72 },
+    { date: "07/14", tts_count: 52, quality: 94.3, response_time: 234, cpu_usage: 65, memory_usage: 75 },
+    { date: "07/15", tts_count: 38, quality: 91.8, response_time: 267, cpu_usage: 72, memory_usage: 78 },
+    { date: "07/16", tts_count: 65, quality: 93.5, response_time: 198, cpu_usage: 58, memory_usage: 68 },
+    { date: "07/17", tts_count: 58, quality: 95.2, response_time: 223, cpu_usage: 62, memory_usage: 74 },
+    { date: "07/18", tts_count: 47, quality: 94.1, response_time: 234, cpu_usage: 65, memory_usage: 78 },
+    { date: "07/19", tts_count: 53, quality: 93.8, response_time: 218, cpu_usage: 69, memory_usage: 76 }
   ])
   
   const [pieData, setPieData] = useState([
-    { name: "활성", value: 12, color: "#00C49F" },
-    { name: "비활성", value: 2, color: "#FFBB28" },
+    { name: "활성", value: 14, color: "#00C49F" },
+    { name: "비활성", value: 3, color: "#FFBB28" },
     { name: "테스트", value: 1, color: "#FF8042" }
   ])
   
@@ -166,104 +175,82 @@ export default function SystemMonitoringPage() {
   const { toast } = useToast()
 
   useEffect(() => {
-    fetchMetrics()
-    
-    // 실시간 모드일 때 10초마다 업데이트
+    // 실시간 모드일 때 10초마다 업데이트, 다른 모드는 30초마다
     const interval = timeRange === "realtime" 
-      ? setInterval(fetchMetrics, 10000) 
-      : setInterval(fetchMetrics, 60000) // 다른 모드는 1분마다
+      ? setInterval(updateWithRandomData, 10000) 
+      : setInterval(updateWithRandomData, 30000)
     
     return () => clearInterval(interval)
   }, [timeRange])
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = () => {
     setIsLoading(true)
-    try {
-      const accessToken = localStorage.getItem("access_token")
-      if (!accessToken) {
-        throw new Error("인증 토큰이 없습니다")
-      }
-
-      // 시스템 메트릭 조회
-      const systemResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/metrics/system?time_range=${timeRange}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      // TTS 메트릭 조회
-      const ttsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/metrics/tts?time_range=${timeRange}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      // 시나리오 메트릭 조회
-      const scenarioResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/metrics/scenarios?time_range=${timeRange}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      // 임시로 더미 데이터 사용 (실제 API가 없는 경우)
-      if (!systemResponse.ok || !ttsResponse.ok || !scenarioResponse.ok) {
-        // 더미 데이터로 업데이트
-        updateWithRandomData()
-      } else {
-        // 실제 데이터 처리
-        const systemData = await systemResponse.json()
-        const ttsData = await ttsResponse.json()
-        const scenarioData = await scenarioResponse.json()
-        
-        setSystemMetrics(systemData)
-        setTtsMetrics(ttsData)
-        setScenarioMetrics(scenarioData)
-      }
-      
-      setLastUpdated(new Date())
-      
-    } catch (error) {
-      console.error("Fetch metrics error:", error)
-      
-      // 에러 시 더미 데이터로 업데이트
+    // 하드코딩된 데이터로 업데이트
+    setTimeout(() => {
       updateWithRandomData()
+      setLastUpdated(new Date())
+      setIsLoading(false)
       
       toast({
-        title: "데이터 로드 실패",
-        description: "모니터링 데이터를 불러오는데 실패했습니다. 더미 데이터를 표시합니다.",
-        variant: "destructive",
+        title: "데이터 업데이트",
+        description: "모니터링 데이터가 업데이트되었습니다.",
       })
-    } finally {
-      setIsLoading(false)
-    }
+    }, 1000) // 1초 지연으로 로딩 효과
   }
 
   const updateWithRandomData = () => {
-    // 더미 데이터 생성 (실제로는 서버에서 받아올 데이터)
+    // 하드코딩된 더미 데이터로 실시간 효과 구현
+    const currentTime = new Date()
+    const hour = currentTime.getHours()
+    
+    // 시간대별로 다른 데이터 패턴 적용
+    const isBusinessHour = hour >= 9 && hour <= 18
+    const cpuBase = isBusinessHour ? 65 : 45
+    const memoryBase = isBusinessHour ? 75 : 60
+    const connectionsBase = isBusinessHour ? 40 : 25
+    
     setSystemMetrics({
-      cpu_usage: Math.random() * 30 + 50, // 50-80%
-      memory_usage: Math.random() * 20 + 70, // 70-90%
-      disk_usage: Math.random() * 20 + 40, // 40-60%
-      response_time: Math.random() * 100 + 200, // 200-300ms
-      active_connections: Math.floor(Math.random() * 20 + 30), // 30-50
-      requests_per_minute: Math.floor(Math.random() * 50 + 100) // 100-150
+      cpu_usage: cpuBase + Math.random() * 15, // 비즈니스 시간 기준 변동
+      memory_usage: memoryBase + Math.random() * 10,
+      disk_usage: 42 + Math.random() * 8, // 40-50% 범위
+      response_time: 200 + Math.random() * 80, // 200-280ms
+      active_connections: Math.floor(connectionsBase + Math.random() * 15),
+      requests_per_minute: Math.floor((isBusinessHour ? 120 : 80) + Math.random() * 40)
     })
     
     setTtsMetrics(prev => ({
       ...prev,
-      in_progress: Math.floor(Math.random() * 5 + 1), // 1-5
-      completed_today: prev.completed_today + Math.floor(Math.random() * 3),
-      failed_today: Math.random() > 0.8 ? prev.failed_today + 1 : prev.failed_today
+      in_progress: Math.floor(Math.random() * 4 + 1), // 1-4개
+      completed_today: isBusinessHour ? 
+        Math.min(prev.completed_today + Math.floor(Math.random() * 2), 65) : 
+        prev.completed_today,
+      failed_today: Math.random() > 0.9 ? Math.min(prev.failed_today + 1, 5) : prev.failed_today,
+      quality_average: 92 + Math.random() * 4 // 92-96% 품질
     }))
+    
+    // 차트 데이터도 업데이트
+    const today = new Date().toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })
+    const todayData = {
+      date: today,
+      tts_count: isBusinessHour ? Math.floor(Math.random() * 15 + 40) : Math.floor(Math.random() * 10 + 20),
+      quality: 92 + Math.random() * 4,
+      response_time: 200 + Math.random() * 80,
+      cpu_usage: cpuBase + Math.random() * 15,
+      memory_usage: memoryBase + Math.random() * 10
+    }
+    
+    setChartData(prev => {
+      const updated = [...prev]
+      if (updated[updated.length - 1].date !== today) {
+        // 새로운 날짜 데이터 추가
+        updated.push(todayData)
+        if (updated.length > 7) updated.shift() // 최근 7일만 유지
+      } else {
+        // 오늘 데이터 업데이트
+        updated[updated.length - 1] = todayData
+      }
+      return updated
+    })
   }
 
   const getStatusColor = (status: string) => {
